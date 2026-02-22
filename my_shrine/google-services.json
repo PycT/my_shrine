@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "806995303188",
+    "project_id": "my-shrine-237de",
+    "storage_bucket": "my-shrine-237de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:806995303188:android:ebb0593885059904094001",
+        "android_client_info": {
+          "package_name": "com.yellowcup.my_shrine"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "806995303188-hkqdrn2tlk86eceau7ecmorb1grnhktv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yellowcup.my_shrine",
+            "certificate_hash": "5767c45429bab5dbbddd76d46339cff63fd7da41"
+          }
+        },
+        {
+          "client_id": "806995303188-rilgbp41snb3gmm9tngf4adhr5k8fohh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtvT3hc8XAAZ8DQqKGz2Z03RR5z5tdy1c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "806995303188-rilgbp41snb3gmm9tngf4adhr5k8fohh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

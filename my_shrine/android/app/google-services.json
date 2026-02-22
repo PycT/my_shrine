@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "806995303188",
+    "project_id": "my-shrine-237de",
+    "storage_bucket": "my-shrine-237de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:806995303188:android:ebb0593885059904094001",
+        "android_client_info": {
+          "package_name": "com.yellowcup.my_shrine"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtvT3hc8XAAZ8DQqKGz2Z03RR5z5tdy1c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
