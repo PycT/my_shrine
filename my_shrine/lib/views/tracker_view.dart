@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/widgets/authentication/auth_gate.dart';
 import 'package:my_shrine/widgets/common_app_bar.dart';
+import 'package:my_shrine/widgets/tracker_toggle_widget.dart';
 
 class TrackerViewPage extends StatelessWidget {
   const TrackerViewPage({super.key});
@@ -17,8 +18,10 @@ class TrackerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CommonAppBar(title: "My Shrine"),
-      body: Center(child: Text("Zhopa")),
+      appBar: CommonAppBar(title: "It is a great day!"),
+      body: SafeArea(
+        child: Center(child: Column(children: [TrackerToggleWidget()])),
+      ),
     );
   }
 }
