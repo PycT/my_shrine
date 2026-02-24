@@ -50,7 +50,7 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
           child: ElevatedButton(
             onPressed: _toggle,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _running ? Colors.greenAccent : shrine.color,
+              backgroundColor: _running ? shrine.color : Colors.grey[300],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),

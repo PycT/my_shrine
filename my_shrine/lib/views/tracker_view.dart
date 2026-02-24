@@ -36,7 +36,7 @@ class TrackerView extends StatelessWidget {
           child: Column(
             children: [
               TrackerToggleWidget(),
-              SizedBox(height: AppStyles.verticalSeparatorHeight),
+              SizedBox(height: AppStyles.verticalSeparatorHeight * 2),
               SizedBox(
                 width: MediaQuery.of(context).size.width * 0.8,
                 child: Wrap(
