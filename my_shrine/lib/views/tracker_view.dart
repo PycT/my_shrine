@@ -5,6 +5,8 @@ import 'package:my_shrine/widgets/common_app_bar.dart';
 import 'package:my_shrine/widgets/shrine_switch_widget.dart';
 import 'package:my_shrine/widgets/tracker_toggle_widget.dart';
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/utils/firestore_utils.dart';
+import 'package:my_shrine/widgets/common_nav_bar.dart';
 
 class TrackerViewPage extends StatelessWidget {
   const TrackerViewPage({super.key});
@@ -24,11 +26,12 @@ class TrackerView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shrines = [
-      Shrine(name: "Shrine 1", color: Colors.red),
-      Shrine(name: "Shrine 2", color: Colors.green),
-      Shrine(name: "Shrine 3", color: Colors.blue),
-    ];
+    final shrines = shrinesInitialList;
+    // FirestoreUtils.getUser(userId: "dummy@dummy.com").then((testUser) {
+    //   print("=======");
+    //   print(testUser);
+    //   print("=======");
+    // });
     return Scaffold(
       appBar: CommonAppBar(title: "It is a great day!"),
       body: SafeArea(
@@ -49,6 +52,7 @@ class TrackerView extends StatelessWidget {
           ),
         ),
       ),
+      bottomNavigationBar: const CommonNavigationBar(currentIndex: 1),
     );
   }
 }

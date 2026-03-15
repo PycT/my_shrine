@@ -17,12 +17,13 @@ class ShrineSwitchWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color shrineColor = Color(int.parse('FF${shrine.color}', radix: 16));
     return ElevatedButton(
       onPressed: _onTap,
       style: ElevatedButton.styleFrom(
-        backgroundColor: shrine.color,
+        backgroundColor: shrineColor,
         foregroundColor:
-            ThemeData.estimateBrightnessForColor(shrine.color) ==
+            ThemeData.estimateBrightnessForColor(shrineColor) ==
                 Brightness.light
             ? Colors.black
             : Colors.white,
