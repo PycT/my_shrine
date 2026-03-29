@@ -8,6 +8,7 @@ import 'package:my_shrine/data/firestore_constants.dart';
 /// time_ledger/                          <-- rootCollection
 ///   └── {userId}/                       <-- document ID = user_id string
 ///         ├── is_initialized            <-- false by default
+///         ├── last_update               <-- server timestamp, set on every write
 ///         ├── user_shrines/             <-- userShrinesCollection
 ///         │     └── {shrineName}/       <-- document ID = shrine name
 ///         │           └── shrine_color
@@ -17,12 +18,12 @@ import 'package:my_shrine/data/firestore_constants.dart';
 ///                     ├── shrine_name
 ///                     └── start_timestamp
 /// ```
-/// Granularity for date-based aggregation in [FirestoreUtils.getLedgerSummary].
+/// Granularity for date-based aggregation in [FirestoreHelpers.getLedgerSummary].
 enum DateGranularity { day, month, year }
 
-class FirestoreUtils {
+class FirestoreHelpers {
   // Private constructor — this class should not be instantiated.
-  FirestoreUtils._();
+  FirestoreHelpers._();
 
   /// Reference to the Firestore instance.
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -52,14 +53,15 @@ class FirestoreUtils {
   // ---------------------------------------------------------------------------
 
   /// Creates the user document under `time_ledger/` with [userId] as the
-  /// document ID. Sets `user_id` to the given value and `is_initialized` to
-  /// `false`.
+  /// document ID. Sets `is_initialized` to `false` and `last_update` to the
+  /// current server timestamp.
   ///
   /// Uses `merge: true` so existing sub-collections are not affected.
   static Future<void> createUser({required String userId}) async {
-    await userDocRef(
-      userId,
-    ).set({'is_initialized': false}, SetOptions(merge: true));
+    await userDocRef(userId).set({
+      'is_initialized': false,
+      'last_update': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// Reads the user document for [userId].
@@ -75,7 +77,8 @@ class FirestoreUtils {
   /// Updates fields on the user document for [userId].
   ///
   /// [data] is a map of field names to new values (e.g.
-  /// `{'is_initialized': true}`).
+  /// `{'is_initialized': true}`). The `last_update` field is always set to the
+  /// current server timestamp automatically.
   ///
   /// Throws a [StateError] if the document does not exist.
   static Future<void> updateUser({
@@ -87,7 +90,10 @@ class FirestoreUtils {
     if (!snapshot.exists) {
       throw StateError('No user document found for "$userId"');
     }
-    await docRef.update(data);
+    await docRef.update({
+      ...data,
+      'last_update': FieldValue.serverTimestamp(),
+    });
   }
 
   // ---------------------------------------------------------------------------

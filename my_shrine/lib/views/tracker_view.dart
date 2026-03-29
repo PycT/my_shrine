@@ -5,7 +5,7 @@ import 'package:my_shrine/widgets/common_app_bar.dart';
 import 'package:my_shrine/widgets/shrine_switch_widget.dart';
 import 'package:my_shrine/widgets/tracker_toggle_widget.dart';
 import 'package:my_shrine/entities/shrine.dart';
-import 'package:my_shrine/utils/firestore_utils.dart';
+import 'package:my_shrine/helpers/firestore_helpers.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
 
 class TrackerViewPage extends StatelessWidget {
@@ -27,7 +27,7 @@ class TrackerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shrines = shrinesInitialList;
-    // FirestoreUtils.getUser(userId: "dummy@dummy.com").then((testUser) {
+    // FirestoreHelpers.getUser(userId: "dummy@dummy.com").then((testUser) {
     //   print("=======");
     //   print(testUser);
     //   print("=======");
