@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:my_shrine/data/firestore_constants.dart';
+import 'package:my_shrine/data/state_notifiers.dart';
+import 'package:my_shrine/data/default_shrines.dart';
 
 /// A utility class providing static methods to read from and write to Firestore.
 ///
@@ -9,15 +12,47 @@ import 'package:my_shrine/data/firestore_constants.dart';
 ///   └── {userId}/                       <-- document ID = user_id string
 ///         ├── is_initialized            <-- false by default
 ///         ├── last_update               <-- server timestamp, set on every write
+///         ├── last_device_id            <-- last device that wrote to this doc
 ///         ├── user_shrines/             <-- userShrinesCollection
-///         │     └── {shrineName}/       <-- document ID = shrine name
-///         │           └── shrine_color
+///         │     └── {autoId}/           <-- auto-generated document ID
+///         │           ├── name          <-- unique across collection
+///         │           ├── shrine_color
+///         │           └── is_deleted    <-- false by default
 ///         └── user_time_ledger/         <-- userLedgerCollection
 ///               └── {docId}/
 ///                     ├── seconds_tracked
 ///                     ├── shrine_name
-///                     └── start_timestamp
+///                     ├── start_timestamp
+///                     └── is_deleted    <-- false by default
 /// ```
+///
+/// **Methods:**
+///
+/// *Initialisation:*
+/// - [init]                — bootstraps the full Firestore structure for the
+///                           current user (user doc + default shrines).
+///
+/// *Technical data:*
+/// - [technicalDataWrite]  — writes `last_update` and `last_device_id` to the
+///                           user doc. Called automatically by every write method.
+///
+/// *User document:*
+/// - [createUser]          — creates the user doc with `is_initialized` = false.
+/// - [getUser]             — reads the user doc; returns `null` if missing.
+/// - [updateUser]          — updates specified fields on the user doc.
+/// - [updateLastDeviceId]  — sets `last_device_id` on the user doc.
+/// - [getLastUpdateInfo]   — reads `last_update` and `last_device_id`.
+///
+/// *Shrines (user_shrines):*
+/// - [getUserShrines]      — reads all shrine docs for a user.
+/// - [addShrine]           — adds a shrine (auto-ID); enforces name uniqueness.
+/// - [modifyShrine]        — updates name and/or color by current shrine name.
+///
+/// *Time ledger (user_time_ledger):*
+/// - [getLedgerSummary]    — aggregates seconds by shrine + date granularity.
+/// - [addLedgerRecord]     — adds a new time-tracking entry (auto-ID).
+/// - [hasLedgerRecord]     — checks if a record exists for shrine + timestamp.
+/// - [updateLedgerSeconds] — updates seconds on a matching ledger record.
 /// Granularity for date-based aggregation in [FirestoreHelpers.getLedgerSummary].
 enum DateGranularity { day, month, year }
 
@@ -48,20 +83,81 @@ class FirestoreHelpers {
   static DocumentReference userDocRef(String userId) =>
       _db.collection(FirestoreConstants.rootCollection).doc(userId);
 
+  /// Stamps the user document with `last_update` and `last_device_id`.
+  ///
+  /// Called internally by every writing method so the user document always
+  /// reflects the most recent write. The device name is read from the
+  /// Android system via `device_info_plus`.
+  static Future<void> _stampUserDoc(String userId) async {
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    final deviceName = androidInfo.model;
+    await userDocRef(userId).set({
+      'last_update': FieldValue.serverTimestamp(),
+      'last_device_id': deviceName,
+    }, SetOptions(merge: true));
+  }
+
   // ---------------------------------------------------------------------------
-  // 0. Create / read user document
+  // 0. Initialise the Firestore structure for the current user
+  // ---------------------------------------------------------------------------
+
+  /// Bootstraps the full Firestore structure for the currently signed-in user.
+  ///
+  /// Uses the email from [StateNotifiers.user] as the document ID under
+  /// `time_ledger/`. If the user is already initialised (`is_initialized` is
+  /// `true`) the method returns immediately.
+  ///
+  /// Steps performed:
+  /// 1. Reads (or creates) the user document.
+  /// 2. Seeds every entry from [defaultShrinesList] into `user_shrines`.
+  /// 3. Sets `is_initialized` to `true`.
+  ///
+  /// Throws a [StateError] if no user is currently signed in or the user has
+  /// no email.
+  static Future<void> init() async {
+    final user = StateNotifiers.user.value;
+    if (user == null || user.email == null) {
+      throw StateError('No signed-in user or user has no email');
+    }
+    final userId = user.email!;
+
+    // Check if the user document already exists and is initialised.
+    final existing = await getUser(userId: userId);
+    if (existing != null && existing['is_initialized'] == true) return;
+
+    // Create the user document (merge-safe).
+    await createUser(userId: userId);
+
+    // Seed default shrines.
+    for (final shrine in defaultShrinesList) {
+      await addShrine(
+        userId: userId,
+        shrineName: shrine.name,
+        shrineColor: shrine.color,
+      );
+    }
+
+    // Mark the user as initialised.
+    await updateUser(
+      userId: userId,
+      data: {'is_initialized': true},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 1. Create / read user document
   // ---------------------------------------------------------------------------
 
   /// Creates the user document under `time_ledger/` with [userId] as the
-  /// document ID. Sets `is_initialized` to `false` and `last_update` to the
-  /// current server timestamp.
+  /// document ID. Sets `is_initialized` to `false` and stamps the document
+  /// with `last_update` and `last_device_id`.
   ///
   /// Uses `merge: true` so existing sub-collections are not affected.
   static Future<void> createUser({required String userId}) async {
     await userDocRef(userId).set({
       'is_initialized': false,
-      'last_update': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    await _stampUserDoc(userId);
   }
 
   /// Reads the user document for [userId].
@@ -77,23 +173,60 @@ class FirestoreHelpers {
   /// Updates fields on the user document for [userId].
   ///
   /// [data] is a map of field names to new values (e.g.
-  /// `{'is_initialized': true}`). The `last_update` field is always set to the
-  /// current server timestamp automatically.
+  /// `{'is_initialized': true}`). `last_update` and `last_device_id` are
+  /// always stamped automatically via [_stampUserDoc].
   ///
   /// Throws a [StateError] if the document does not exist.
   static Future<void> updateUser({
     required String userId,
     required Map<String, dynamic> data,
   }) async {
+    if (data.isEmpty) return;
+
     final docRef = userDocRef(userId);
     final snapshot = await docRef.get();
     if (!snapshot.exists) {
       throw StateError('No user document found for "$userId"');
     }
-    await docRef.update({
-      ...data,
-      'last_update': FieldValue.serverTimestamp(),
-    });
+    await docRef.update(data);
+    await _stampUserDoc(userId);
+  }
+
+  /// Updates `last_device_id` and `last_update` on the user document for
+  /// [userId].
+  ///
+  /// Delegates to [_stampUserDoc] which reads the device name from the
+  /// Android system.
+  ///
+  /// Throws a [StateError] if the document does not exist.
+  static Future<void> updateLastDeviceId({
+    required String userId,
+  }) async {
+    final docRef = userDocRef(userId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) {
+      throw StateError('No user document found for "$userId"');
+    }
+    await _stampUserDoc(userId);
+  }
+
+  /// Returns the `last_update` and `last_device_id` fields from the user
+  /// document for [userId].
+  ///
+  /// Returns a map with keys `last_update` ([Timestamp] or `null`) and
+  /// `last_device_id` ([String] or `null`), or `null` if the document does
+  /// not exist.
+  static Future<Map<String, dynamic>?> getLastUpdateInfo({
+    required String userId,
+  }) async {
+    final snapshot = await userDocRef(userId).get();
+    if (!snapshot.exists) return null;
+    final data = snapshot.data() as Map<String, dynamic>?;
+    if (data == null) return null;
+    return {
+      'last_update': data['last_update'],
+      'last_device_id': data['last_device_id'],
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -102,15 +235,13 @@ class FirestoreHelpers {
 
   /// Reads every document from [user_shrines] for the given [userId].
   ///
-  /// Returns a list of maps, each containing `shrine_name` (the document ID)
-  /// and `shrine_color`.
+  /// Returns a list of maps, each containing `name` and `shrine_color`.
   static Future<List<Map<String, dynamic>>> getUserShrines({
     required String userId,
   }) async {
     final snapshot = await shrinesRef(userId).get();
     return snapshot.docs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      return {'shrine_name': doc.id, ...data};
+      return doc.data() as Map<String, dynamic>;
     }).toList();
   }
 
@@ -118,28 +249,45 @@ class FirestoreHelpers {
   // 2. Add a shrine to user_shrines
   // ---------------------------------------------------------------------------
 
-  /// Adds a new shrine document to [user_shrines] using [shrineName] as the
-  /// document ID.
+  /// Adds a new shrine document to [user_shrines] with an auto-generated ID.
   ///
-  /// Returns the shrine name used as the document key.
+  /// Throws a [StateError] if a shrine with the same [shrineName] already
+  /// exists in the collection (names must be unique).
+  ///
+  /// Returns the auto-generated document ID.
   static Future<String> addShrine({
     required String userId,
     required String shrineName,
     required String shrineColor,
   }) async {
-    await shrinesRef(userId).doc(shrineName).set({'shrine_color': shrineColor});
-    return shrineName;
+    // Enforce uniqueness on the `name` field.
+    final existing = await shrinesRef(
+      userId,
+    ).where('name', isEqualTo: shrineName).limit(1).get();
+    if (existing.docs.isNotEmpty) {
+      throw StateError('A shrine named "$shrineName" already exists');
+    }
+
+    final docRef = await shrinesRef(userId).add({
+      'name': shrineName,
+      'shrine_color': shrineColor,
+      'is_deleted': false,
+    });
+    await _stampUserDoc(userId);
+    return docRef.id;
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Modify shrine name and/or color (identified by shrine name doc ID)
+  // 3. Modify shrine name and/or color (looked up by current name)
   // ---------------------------------------------------------------------------
 
-  /// Updates the shrine document whose ID is [currentName].
+  /// Updates fields on the shrine document whose `name` equals [currentName].
   ///
-  /// If [newName] is provided the document is re-created under the new name
-  /// (Firestore does not support renaming document IDs).
-  /// If [newColor] is provided the `shrine_color` field is updated.
+  /// Only the provided parameters are written. If neither [newName] nor
+  /// [newColor] is specified, the method returns without touching Firestore.
+  ///
+  /// If [newName] is provided, uniqueness is enforced — a [StateError] is
+  /// thrown if another shrine already has that name.
   ///
   /// Throws a [StateError] if no shrine with [currentName] exists.
   static Future<void> modifyShrine({
@@ -148,25 +296,33 @@ class FirestoreHelpers {
     String? newName,
     String? newColor,
   }) async {
-    final docRef = shrinesRef(userId).doc(currentName);
-    final docSnapshot = await docRef.get();
+    final updates = <String, dynamic>{
+      if (newName != null) 'name': newName,
+      if (newColor != null) 'shrine_color': newColor,
+    };
+    if (updates.isEmpty) return;
 
-    if (!docSnapshot.exists) {
+    // Find the document by its `name` field.
+    final snapshot = await shrinesRef(
+      userId,
+    ).where('name', isEqualTo: currentName).limit(1).get();
+
+    if (snapshot.docs.isEmpty) {
       throw StateError('No shrine found with name "$currentName"');
     }
 
+    // If renaming, check that the new name is not already taken.
     if (newName != null && newName != currentName) {
-      // Firestore doc IDs are immutable — copy to new doc, delete old one.
-      final oldData = docSnapshot.data() as Map<String, dynamic>;
-      final mergedData = <String, dynamic>{
-        ...oldData,
-        if (newColor != null) 'shrine_color': newColor,
-      };
-      await shrinesRef(userId).doc(newName).set(mergedData);
-      await docRef.delete();
-    } else if (newColor != null) {
-      await docRef.update({'shrine_color': newColor});
+      final conflict = await shrinesRef(
+        userId,
+      ).where('name', isEqualTo: newName).limit(1).get();
+      if (conflict.docs.isNotEmpty) {
+        throw StateError('A shrine named "$newName" already exists');
+      }
     }
+
+    await snapshot.docs.first.reference.update(updates);
+    await _stampUserDoc(userId);
   }
 
   // ---------------------------------------------------------------------------
@@ -211,8 +367,7 @@ class FirestoreHelpers {
           '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
         DateGranularity.month =>
           '${date.year}-${date.month.toString().padLeft(2, '0')}',
-        DateGranularity.year =>
-          '${date.year}',
+        DateGranularity.year => '${date.year}',
       };
 
       result.putIfAbsent(shrineName, () => <String, int>{});
@@ -240,7 +395,9 @@ class FirestoreHelpers {
       'seconds_tracked': secondsTracked,
       'shrine_name': shrineName,
       'start_timestamp': startTimestamp,
+      'is_deleted': false,
     });
+    await _stampUserDoc(userId);
     return docRef.id;
   }
 
@@ -293,5 +450,24 @@ class FirestoreHelpers {
     await snapshot.docs.first.reference.update({
       'seconds_tracked': secondsTracked,
     });
+    await _stampUserDoc(userId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. Read all raw ledger records (for sync)
+  // ---------------------------------------------------------------------------
+
+  /// Reads every document from [user_time_ledger] for the given [userId]
+  /// without aggregation.
+  ///
+  /// Returns a list of maps, each containing `shrine_name`, `seconds_tracked`,
+  /// `start_timestamp`, and `is_deleted`.
+  static Future<List<Map<String, dynamic>>> getLedgerRecords({
+    required String userId,
+  }) async {
+    final snapshot = await ledgerRef(userId).get();
+    return snapshot.docs.map((doc) {
+      return doc.data() as Map<String, dynamic>;
+    }).toList();
   }
 }

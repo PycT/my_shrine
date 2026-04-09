@@ -15,4 +15,14 @@ class SqliteConstants {
   static const String colId = 'id';
   static const String colSecondsTracked = 'seconds_tracked';
   static const String colStartTimestamp = 'start_timestamp';
+
+  // Table – technical_records
+  static const String technicalRecordsTable = 'technical_records';
+
+  // Columns – technical_records
+  static const String colLastUpdate = 'last_update';
+  static const String colLastSync = 'last_sync';
+
+  // Columns – shared
+  static const String colIsDeleted = 'is_deleted';
 }

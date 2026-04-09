@@ -1,0 +1,19 @@
+name: User
+description: Represents the user configuration and status document.
+storage:
+  firestore: time_ledger/{userId}
+  sqlite: N/A (User state is typically stored in Firestore only based on the comments)
+fields:
+  id:
+    type: String
+    description: The user_id string, used as the document ID in Firestore.
+  is_initialized:
+    type: bool
+    default: false
+    description: Indicates if the user has been initialized.
+  last_update:
+    type: Timestamp
+    description: Server timestamp, updated on every write to the user document.
+  last_device_id:
+    type: String
+    description: The ID of the last device that performed a write to this user's data.

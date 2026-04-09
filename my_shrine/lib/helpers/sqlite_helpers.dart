@@ -12,13 +12,40 @@ enum DateGranularity { day, month, year }
 /// ```
 /// shrines
 ///   ├── shrine_name   TEXT PRIMARY KEY
-///   └── shrine_color   TEXT NOT NULL
+///   ├── shrine_color   TEXT NOT NULL
+///   └── is_deleted     INTEGER NOT NULL DEFAULT 0
 ///
 /// time_ledger
 ///   ├── id               INTEGER PRIMARY KEY AUTOINCREMENT
 ///   ├── shrine_name      TEXT NOT NULL
 ///   ├── seconds_tracked  INTEGER NOT NULL
-///   └── start_timestamp  TEXT NOT NULL   (ISO 8601)
+///   ├── start_timestamp  TEXT NOT NULL   (ISO 8601)
+///   └── is_deleted       INTEGER NOT NULL DEFAULT 0
+///
+/// technical_records          (always exactly one row)
+///   ├── last_update   TEXT   (ISO 8601, nullable)
+///   └── last_sync     TEXT   (ISO 8601, nullable)
+/// ```
+///
+/// **Methods:**
+///
+/// *Database:*
+/// - [localDbInit]          — opens/creates the DB and all tables.
+///
+/// *Shrines:*
+/// - [getUserShrines]       — reads all shrine rows.
+/// - [addShrine]            — inserts a shrine row.
+/// - [modifyShrine]         — updates shrine name and/or color.
+///
+/// *Time ledger:*
+/// - [getLedgerSummary]     — aggregates seconds by shrine + date granularity.
+/// - [addLedgerRecord]      — inserts a time-tracking row.
+/// - [hasLedgerRecord]      — checks if a record exists for shrine + timestamp.
+/// - [updateLedgerSeconds]  — updates seconds on a matching ledger row.
+///
+/// *Technical records:*
+/// - [getTechnicalRecord]   — reads the single technical-records row.
+/// - [updateTechnicalRecord]— updates last_update and/or last_sync.
 /// ```
 class SqliteHelpers {
   // Private constructor — this class should not be instantiated.
@@ -31,8 +58,8 @@ class SqliteHelpers {
   // 0. Initialise the local database
   // ---------------------------------------------------------------------------
 
-  /// Opens (or creates) the local SQLite database and creates the `shrines`
-  /// and `time_ledger` tables if they do not already exist.
+  /// Opens (or creates) the local SQLite database and creates the `shrines`,
+  /// `time_ledger`, and `technical_records` tables if they do not already exist.
   ///
   /// Should be called once at app startup before any other [SqliteHelpers] method.
   static Future<Database> localDbInit() async {
@@ -47,7 +74,8 @@ class SqliteHelpers {
         await db.execute('''
           CREATE TABLE ${SqliteConstants.shrinesTable} (
             ${SqliteConstants.colShrineName}  TEXT PRIMARY KEY,
-            ${SqliteConstants.colShrineColor} TEXT NOT NULL
+            ${SqliteConstants.colShrineColor} TEXT NOT NULL,
+            ${SqliteConstants.colIsDeleted}   INTEGER NOT NULL DEFAULT 0
           )
         ''');
 
@@ -56,9 +84,23 @@ class SqliteHelpers {
             ${SqliteConstants.colId}              INTEGER PRIMARY KEY AUTOINCREMENT,
             ${SqliteConstants.colShrineName}       TEXT NOT NULL,
             ${SqliteConstants.colSecondsTracked}   INTEGER NOT NULL,
-            ${SqliteConstants.colStartTimestamp}   TEXT NOT NULL
+            ${SqliteConstants.colStartTimestamp}   TEXT NOT NULL,
+            ${SqliteConstants.colIsDeleted}        INTEGER NOT NULL DEFAULT 0
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE ${SqliteConstants.technicalRecordsTable} (
+            ${SqliteConstants.colLastUpdate}  TEXT,
+            ${SqliteConstants.colLastSync}    TEXT
+          )
+        ''');
+
+        // Seed the single technical-records row.
+        await db.insert(SqliteConstants.technicalRecordsTable, {
+          SqliteConstants.colLastUpdate: null,
+          SqliteConstants.colLastSync: null,
+        });
       },
     );
 
@@ -70,7 +112,16 @@ class SqliteHelpers {
     return _db ?? await localDbInit();
   }
 
-
+  /// Stamps `technical_records.last_update` with the current timestamp.
+  ///
+  /// Called internally by every writing method so the technical record always
+  /// reflects the most recent local write.
+  static Future<void> _stampLastUpdate() async {
+    final db = await _database;
+    await db.update(SqliteConstants.technicalRecordsTable, {
+      SqliteConstants.colLastUpdate: DateTime.now().toIso8601String(),
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // 1. Read all shrines
@@ -101,9 +152,11 @@ class SqliteHelpers {
       {
         SqliteConstants.colShrineName: shrineName,
         SqliteConstants.colShrineColor: shrineColor,
+        SqliteConstants.colIsDeleted: 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _stampLastUpdate();
     return shrineName;
   }
 
@@ -148,6 +201,8 @@ class SqliteHelpers {
         SqliteConstants.colShrineName: newName,
         SqliteConstants.colShrineColor:
             newColor ?? oldRow[SqliteConstants.colShrineColor],
+        SqliteConstants.colIsDeleted:
+            oldRow[SqliteConstants.colIsDeleted] ?? 0,
       });
     } else if (newColor != null) {
       await db.update(
@@ -159,6 +214,7 @@ class SqliteHelpers {
         whereArgs: [currentName],
       );
     }
+    await _stampLastUpdate();
   }
 
   // ---------------------------------------------------------------------------
@@ -226,11 +282,14 @@ class SqliteHelpers {
     required DateTime startTimestamp,
   }) async {
     final db = await _database;
-    return db.insert(SqliteConstants.ledgerTable, {
+    final id = await db.insert(SqliteConstants.ledgerTable, {
       SqliteConstants.colShrineName: shrineName,
       SqliteConstants.colSecondsTracked: secondsTracked,
       SqliteConstants.colStartTimestamp: startTimestamp.toIso8601String(),
+      SqliteConstants.colIsDeleted: 0,
     });
+    await _stampLastUpdate();
+    return id;
   }
 
   // ---------------------------------------------------------------------------
@@ -283,5 +342,111 @@ class SqliteHelpers {
         'No ledger record found for shrine "$shrineName" at $startTimestamp',
       );
     }
+    await _stampLastUpdate();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. Read the technical record
+  // ---------------------------------------------------------------------------
+
+  /// Reads the single row from `technical_records`.
+  ///
+  /// Returns a map with `last_update` and `last_sync` (ISO 8601 strings or
+  /// `null`), or `null` if the row is missing.
+  static Future<Map<String, dynamic>?> getTechnicalRecord() async {
+    final db = await _database;
+    final rows = await db.query(
+      SqliteConstants.technicalRecordsTable,
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 9. Update the technical record
+  // ---------------------------------------------------------------------------
+
+  /// Updates `last_update` and/or `last_sync` on the single
+  /// `technical_records` row.
+  ///
+  /// Only the provided (non-null) fields are written. If both are `null` the
+  /// method returns without touching the database.
+  static Future<void> updateTechnicalRecord({
+    DateTime? lastUpdate,
+    DateTime? lastSync,
+  }) async {
+    final updates = <String, dynamic>{
+      if (lastUpdate != null)
+        SqliteConstants.colLastUpdate: lastUpdate.toIso8601String(),
+      if (lastSync != null)
+        SqliteConstants.colLastSync: lastSync.toIso8601String(),
+    };
+    if (updates.isEmpty) return;
+
+    final db = await _database;
+    await db.update(SqliteConstants.technicalRecordsTable, updates);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 10. Sync helpers — raw read / write (no _stampLastUpdate)
+  // ---------------------------------------------------------------------------
+
+  /// Returns all rows from the `time_ledger` table without aggregation.
+  ///
+  /// Used by [SyncHelpers] to read raw ledger data for syncing.
+  static Future<List<Map<String, dynamic>>> getLedgerRecords() async {
+    final db = await _database;
+    return db.query(SqliteConstants.ledgerTable);
+  }
+
+  /// Deletes all rows from the `shrines` table.
+  static Future<void> clearShrines() async {
+    final db = await _database;
+    await db.delete(SqliteConstants.shrinesTable);
+  }
+
+  /// Deletes all rows from the `time_ledger` table.
+  static Future<void> clearLedger() async {
+    final db = await _database;
+    await db.delete(SqliteConstants.ledgerTable);
+  }
+
+  /// Inserts a shrine row with explicit `is_deleted` value.
+  ///
+  /// Does **not** call [_stampLastUpdate] — intended for sync operations only.
+  static Future<void> insertShrineRaw({
+    required String shrineName,
+    required String shrineColor,
+    required int isDeleted,
+  }) async {
+    final db = await _database;
+    await db.insert(
+      SqliteConstants.shrinesTable,
+      {
+        SqliteConstants.colShrineName: shrineName,
+        SqliteConstants.colShrineColor: shrineColor,
+        SqliteConstants.colIsDeleted: isDeleted,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Inserts a ledger row with explicit `is_deleted` value.
+  ///
+  /// Does **not** call [_stampLastUpdate] — intended for sync operations only.
+  static Future<void> insertLedgerRaw({
+    required String shrineName,
+    required int secondsTracked,
+    required DateTime startTimestamp,
+    required int isDeleted,
+  }) async {
+    final db = await _database;
+    await db.insert(SqliteConstants.ledgerTable, {
+      SqliteConstants.colShrineName: shrineName,
+      SqliteConstants.colSecondsTracked: secondsTracked,
+      SqliteConstants.colStartTimestamp: startTimestamp.toIso8601String(),
+      SqliteConstants.colIsDeleted: isDeleted,
+    });
   }
 }

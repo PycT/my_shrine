@@ -1,0 +1,32 @@
+name: TimeLedger
+description: Represents a discrete record of time tracked for a specific shrine.
+storage:
+  firestore: time_ledger/{userId}/user_time_ledger/{docId}
+  sqlite: table 'time_ledger'
+fields:
+  id:
+    type: dynamic
+    firestore_field: Document ID (String)
+    sqlite_column: id (INTEGER PRIMARY KEY AUTOINCREMENT)
+    description: The unique identifier for the ledger record.
+  shrine_name:
+    type: String
+    firestore_field: shrine_name
+    sqlite_column: shrine_name (TEXT NOT NULL)
+    description: The name of the shrine this time is allocated to.
+  seconds_tracked:
+    type: int
+    firestore_field: seconds_tracked
+    sqlite_column: seconds_tracked (INTEGER NOT NULL)
+    description: The total amount of time tracked in seconds.
+  start_timestamp:
+    type: DateTime
+    firestore_field: start_timestamp (Timestamp)
+    sqlite_column: start_timestamp (TEXT NOT NULL - ISO 8601)
+    description: The date and time when the tracking process began.
+  is_deleted:
+    type: bool
+    default: false
+    firestore_field: is_deleted
+    sqlite_column: is_deleted (INTEGER NOT NULL DEFAULT 0)
+    description: Soft-delete flag. When true the record is treated as deleted.

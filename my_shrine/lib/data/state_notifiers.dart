@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide EmailAuthProvider;
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/data/default_shrines.dart';
 
 class StateNotifiers {
   static ValueNotifier<bool> isLightMode = ValueNotifier(true);

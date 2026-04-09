@@ -1,0 +1,25 @@
+name: Shrine
+description: Represents a category or topic for tracking time.
+storage:
+  firestore: time_ledger/{userId}/user_shrines/{autoId}
+  sqlite: table 'shrines'
+fields:
+  id:
+    type: String
+    description: Auto-generated document ID in Firestore. In SQLite, the primary key is the shrine_name itself.
+  name:
+    type: String
+    firestore_field: name
+    sqlite_column: shrine_name (TEXT PRIMARY KEY)
+    description: Unique name of the shrine across the user's collection.
+  color:
+    type: String
+    firestore_field: shrine_color
+    sqlite_column: shrine_color (TEXT NOT NULL)
+    description: The color associated with this shrine.
+  is_deleted:
+    type: bool
+    default: false
+    firestore_field: is_deleted
+    sqlite_column: is_deleted (INTEGER NOT NULL DEFAULT 0)
+    description: Soft-delete flag. When true the shrine is treated as deleted.
