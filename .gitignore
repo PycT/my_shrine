@@ -8,6 +8,8 @@
 .history
 .agent/
 .agents/
+prompts/
+.env
 
 
 # Flutter repo-specific

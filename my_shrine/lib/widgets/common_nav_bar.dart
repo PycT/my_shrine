@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/views/tracker_view.dart';
 import 'package:my_shrine/views/shrines_config.dart';
+import 'package:my_shrine/views/stats_view.dart';
 
 /// A reusable bottom navigation bar with three tabs:
 /// Home (TrackerView), Stats, and Config.
@@ -20,10 +21,7 @@ class CommonNavigationBar extends StatelessWidget {
     Widget destination;
     switch (index) {
       case 0:
-        // TODO: replace with StatsView
-        destination = const Scaffold(
-          body: Center(child: Text('Stats — coming soon')),
-        );
+        destination = const StatsViewPage();
         break;
       case 1:
         destination = const TrackerViewPage();
@@ -32,7 +30,7 @@ class CommonNavigationBar extends StatelessWidget {
         destination = const ShrinesConfigPage();
         break;
       default:
-        return;
+        destination = const TrackerViewPage();
     }
 
     Navigator.of(

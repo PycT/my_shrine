@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/helpers/sqlite_helpers.dart';
+import 'package:my_shrine/helpers/sync_helpers.dart';
 import 'package:my_shrine/widgets/color_picker_widget.dart';
 
 /// Callback fired when the user finishes editing the shrine.
@@ -19,11 +21,7 @@ class ShrineEditorWidget extends StatefulWidget {
   /// Called with the updated name and RRGGBB colour when the user confirms.
   final ShrineEditedCallback? onEdited;
 
-  const ShrineEditorWidget({
-    super.key,
-    required this.shrine,
-    this.onEdited,
-  });
+  const ShrineEditorWidget({super.key, required this.shrine, this.onEdited});
 
   @override
   State<ShrineEditorWidget> createState() => _ShrineEditorWidgetState();
@@ -51,13 +49,26 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
   Color _foregroundFor(Color bg) =>
       ThemeData.estimateBrightnessForColor(bg) == Brightness.light
-          ? Colors.black
-          : Colors.white;
+      ? Colors.black
+      : Colors.white;
 
   void _enterEditMode() => setState(() => _editing = true);
 
-  void _confirm() {
-    widget.onEdited?.call(_nameController.text, _currentColor);
+  Future<void> _confirm() async {
+    final newName = _nameController.text;
+    final newColor = _currentColor;
+
+    // Persist changes to local SQLite.
+    await SqliteHelpers.modifyShrine(
+      currentName: widget.shrine.name,
+      newName: newName != widget.shrine.name ? newName : null,
+      newColor: newColor != widget.shrine.color ? newColor : null,
+    );
+
+    // Sync local DB to Firestore.
+    await SyncHelpers.localToRemote();
+
+    widget.onEdited?.call(newName, newColor);
     setState(() => _editing = false);
   }
 
@@ -157,8 +168,10 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
               style: const TextStyle(fontSize: 16),
               decoration: const InputDecoration(
                 isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(),
               ),
             ),
