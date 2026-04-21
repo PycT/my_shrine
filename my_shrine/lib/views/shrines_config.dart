@@ -4,6 +4,8 @@ import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/view_data_helpers.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
 import 'package:my_shrine/widgets/shrine_editor_widget.dart';
+import 'package:my_shrine/widgets/shrine_creator_widget.dart';
+import 'package:my_shrine/data/app_styles.dart';
 
 class ShrinesConfigPage extends StatelessWidget {
   const ShrinesConfigPage({super.key});
@@ -35,7 +37,11 @@ class ShrinesConfigPage extends StatelessWidget {
           body: SafeArea(
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: _shrineEditors(shrines),
+              children: [
+                ShrineCreatorWidget(),
+                SizedBox(height: AppStyles.verticalSeparatorHeight),
+                ..._shrineEditors(shrines),
+              ],
             ),
           ),
           bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
