@@ -39,12 +39,16 @@ class TrackerView extends StatelessWidget {
                 children: [
                   TrackerToggleWidget(),
                   SizedBox(height: AppStyles.verticalSeparatorHeight * 2),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    child: Wrap(
-                      spacing: AppStyles.verticalSeparatorHeight,
-                      runSpacing: AppStyles.verticalSeparatorHeight,
-                      children: _shrineSwitches(shrines),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.8,
+                        child: Wrap(
+                          spacing: AppStyles.verticalSeparatorHeight,
+                          runSpacing: AppStyles.verticalSeparatorHeight,
+                          children: _shrineSwitches(shrines),
+                        ),
+                      ),
                     ),
                   ),
                 ],
