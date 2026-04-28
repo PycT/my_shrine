@@ -29,6 +29,7 @@ class ShrineEditorWidget extends StatefulWidget {
 
 class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   bool _editing = false;
+  bool _deleted = false;
   late TextEditingController _nameController;
   late String _currentColor;
 
@@ -63,18 +64,18 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Delete shrine'),
         content: Text(
           'Are you sure you want to delete "${widget.shrine.name}"?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -94,6 +95,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
     try {
       await SqliteHelpers.softDeleteShrine(shrineName: widget.shrine.name);
       await SyncHelpers.localToRemote();
+      if (mounted) setState(() => _deleted = true);
     } finally {
       if (mounted) Navigator.of(context).pop();
     }
@@ -159,6 +161,8 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
+    if (_deleted) return const SizedBox.shrink();
+
     final bgColor = _hexToColor(_currentColor);
     final fgColor = _foregroundFor(bgColor);
 
@@ -279,7 +283,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
           IconButton(
             onPressed: _cancel,
             icon: const Icon(Icons.cancel),
-            color: Theme.of(context).colorScheme.error,
+            color: Colors.grey[400],
             iconSize: 28,
           ),
         ],
