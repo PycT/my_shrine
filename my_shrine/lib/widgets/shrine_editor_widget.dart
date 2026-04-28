@@ -21,7 +21,10 @@ class ShrineEditorWidget extends StatefulWidget {
   /// Called with the updated name and RRGGBB colour when the user confirms.
   final ShrineEditedCallback? onEdited;
 
-  const ShrineEditorWidget({super.key, required this.shrine, this.onEdited});
+  /// When true, shows a flower icon instead of the pencil until next state change.
+  final bool isNew;
+
+  const ShrineEditorWidget({super.key, required this.shrine, this.onEdited, this.isNew = false});
 
   @override
   State<ShrineEditorWidget> createState() => _ShrineEditorWidgetState();
@@ -30,6 +33,7 @@ class ShrineEditorWidget extends StatefulWidget {
 class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   bool _editing = false;
   bool _deleted = false;
+  bool _isNew = false;
   late TextEditingController _nameController;
   late String _currentColor;
 
@@ -38,6 +42,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
     super.initState();
     _nameController = TextEditingController(text: widget.shrine.name);
     _currentColor = widget.shrine.color;
+    _isNew = widget.isNew;
   }
 
   @override
@@ -53,7 +58,10 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
       ? Colors.black
       : Colors.white;
 
-  void _enterEditMode() => setState(() => _editing = true);
+  void _enterEditMode() => setState(() {
+    _isNew = false;
+    _editing = true;
+  });
 
   void _cancel() => setState(() {
     _nameController.text = widget.shrine.name;
@@ -191,7 +199,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.edit, size: 18, color: fgColor),
+                Icon(_isNew ? Icons.local_florist : Icons.edit, size: 18, color: fgColor),
                 const SizedBox(width: 10),
                 Text(
                   widget.shrine.name,

@@ -16,6 +16,7 @@ class ShrinesConfigPage extends StatefulWidget {
 
 class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
   late final ValueNotifier<List<Shrine>> _shrineEditors;
+  final Set<String> _newShrineNames = {};
 
   @override
   void initState() {
@@ -38,12 +39,13 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
   }
 
   void addShrine(Shrine shrine) {
+    _newShrineNames.add(shrine.name);
     _shrineEditors.value = [shrine, ..._shrineEditors.value];
   }
 
   List<Widget> _buildShrineEditors(List<Shrine> shrines) {
     final sorted = List<Shrine>.from(shrines)
-      ..sort((a, b) => a.name.compareTo(b.name));
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return sorted
         .map(
           (shrine) => Padding(
@@ -51,6 +53,7 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
             child: ShrineEditorWidget(
               key: ValueKey(shrine.name),
               shrine: shrine,
+              isNew: _newShrineNames.contains(shrine.name),
             ),
           ),
         )
