@@ -54,26 +54,44 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
   void _enterEditMode() => setState(() => _editing = true);
 
+  void _cancel() => setState(() {
+    _nameController.text = widget.shrine.name;
+    _currentColor = widget.shrine.color;
+    _editing = false;
+  });
+
   Future<void> _confirm() async {
     final newName = _nameController.text;
     final newColor = _currentColor;
 
-    // Persist changes to local SQLite.
-    await SqliteHelpers.modifyShrine(
-      currentName: widget.shrine.name,
-      newName: newName != widget.shrine.name ? newName : null,
-      newColor: newColor != widget.shrine.color ? newColor : null,
+    // Show a modal loader that blocks all interaction.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    // Sync local DB to Firestore.
-    await SyncHelpers.localToRemote();
+    try {
+      // Persist changes to local SQLite.
+      await SqliteHelpers.modifyShrine(
+        currentName: widget.shrine.name,
+        newName: newName != widget.shrine.name ? newName : null,
+        newColor: newColor != widget.shrine.color ? newColor : null,
+      );
 
-    widget.onEdited?.call(newName, newColor);
-    setState(() {
-      widget.shrine.name = newName;
-      widget.shrine.color = newColor;
-      _editing = false;
-    });
+      // Sync local DB to Firestore.
+      await SyncHelpers.localToRemote();
+
+      widget.onEdited?.call(newName, newColor);
+      setState(() {
+        widget.shrine.name = newName;
+        widget.shrine.color = newColor;
+        _editing = false;
+      });
+    } finally {
+      // Dismiss the loader.
+      if (mounted) Navigator.of(context).pop();
+    }
   }
 
   void _openColorPicker() {
@@ -187,6 +205,14 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
             onPressed: _confirm,
             icon: const Icon(Icons.check_circle),
             color: Theme.of(context).colorScheme.primary,
+            iconSize: 28,
+          ),
+
+          // Cancel button
+          IconButton(
+            onPressed: _cancel,
+            icon: const Icon(Icons.cancel),
+            color: Theme.of(context).colorScheme.error,
             iconSize: 28,
           ),
         ],

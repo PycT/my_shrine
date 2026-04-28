@@ -87,14 +87,29 @@ class _ShrineCreatorWidgetState extends State<ShrineCreatorWidget> {
       return;
     }
 
-    // Persist the new shrine to local SQLite.
-    await SqliteHelpers.addShrine(shrineName: name, shrineColor: _currentColor);
+    // Show a modal loader that blocks all interaction.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
 
-    // Sync local DB to Firestore.
-    await SyncHelpers.localToRemote();
+    try {
+      // Persist the new shrine to local SQLite.
+      await SqliteHelpers.addShrine(
+        shrineName: name,
+        shrineColor: _currentColor,
+      );
 
-    widget.onCreated?.call(name, _currentColor);
-    setState(() => _creating = false);
+      // Sync local DB to Firestore.
+      await SyncHelpers.localToRemote();
+
+      widget.onCreated?.call(name, _currentColor);
+      setState(() => _creating = false);
+    } finally {
+      // Dismiss the loader.
+      if (mounted) Navigator.of(context).pop();
+    }
   }
 
   void _openColorPicker() {
