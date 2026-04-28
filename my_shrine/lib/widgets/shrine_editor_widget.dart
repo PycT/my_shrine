@@ -69,7 +69,11 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
     await SyncHelpers.localToRemote();
 
     widget.onEdited?.call(newName, newColor);
-    setState(() => _editing = false);
+    setState(() {
+      widget.shrine.name = newName;
+      widget.shrine.color = newColor;
+      _editing = false;
+    });
   }
 
   void _openColorPicker() {

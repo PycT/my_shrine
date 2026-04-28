@@ -3,14 +3,45 @@ import 'package:my_shrine/data/default_shrines.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/view_data_helpers.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
-import 'package:my_shrine/widgets/shrine_editor_widget.dart';
 import 'package:my_shrine/widgets/shrine_creator_widget.dart';
+import 'package:my_shrine/widgets/shrine_editor_widget.dart';
 import 'package:my_shrine/data/app_styles.dart';
 
-class ShrinesConfigPage extends StatelessWidget {
+class ShrinesConfigPage extends StatefulWidget {
   const ShrinesConfigPage({super.key});
 
-  List<Widget> _shrineEditors(List<Shrine> shrines) {
+  @override
+  State<ShrinesConfigPage> createState() => _ShrinesConfigPageState();
+}
+
+class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
+  late final ValueNotifier<List<Shrine>> _shrineEditors;
+
+  @override
+  void initState() {
+    super.initState();
+    _shrineEditors = ValueNotifier<List<Shrine>>(
+      List<Shrine>.from(defaultShrinesList),
+    );
+    _loadShrines();
+  }
+
+  Future<void> _loadShrines() async {
+    final shrines = await ViewDataHelpers.trackerViewPreload(context);
+    _shrineEditors.value = List<Shrine>.from(shrines);
+  }
+
+  @override
+  void dispose() {
+    _shrineEditors.dispose();
+    super.dispose();
+  }
+
+  void addShrine(Shrine shrine) {
+    _shrineEditors.value = [shrine, ..._shrineEditors.value];
+  }
+
+  List<Widget> _buildShrineEditors(List<Shrine> shrines) {
     final sorted = List<Shrine>.from(shrines)
       ..sort((a, b) => a.name.compareTo(b.name));
     return sorted
@@ -28,25 +59,29 @@ class ShrinesConfigPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Shrine>>(
-      future: ViewDataHelpers.trackerViewPreload(context),
-      builder: (context, snapshot) {
-        final shrines = snapshot.data ?? defaultShrinesList;
-        return Scaffold(
-          appBar: AppBar(title: const Text('Shrines Config')),
-          body: SafeArea(
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                ShrineCreatorWidget(),
-                SizedBox(height: AppStyles.verticalSeparatorHeight),
-                ..._shrineEditors(shrines),
-              ],
+    return Scaffold(
+      appBar: AppBar(title: const Text('Shrines Config')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            ShrineCreatorWidget(
+              onCreated: (name, colorHex) {
+                addShrine(Shrine(name: name, color: colorHex));
+              },
             ),
-          ),
-          bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
-        );
-      },
+            SizedBox(height: AppStyles.verticalSeparatorHeight),
+            Expanded(
+              child: ValueListenableBuilder<List<Shrine>>(
+                valueListenable: _shrineEditors,
+                builder: (context, shrines, _) {
+                  return ListView(children: [..._buildShrineEditors(shrines)]);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
     );
   }
 }
