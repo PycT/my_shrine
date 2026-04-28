@@ -218,6 +218,32 @@ class SqliteHelpers {
   }
 
   // ---------------------------------------------------------------------------
+  // 3b. Soft-delete a shrine
+  // ---------------------------------------------------------------------------
+
+  /// Sets `is_deleted = 1` on the shrine identified by [shrineName].
+  ///
+  /// Throws a [StateError] if no shrine with [shrineName] exists.
+  static Future<void> softDeleteShrine({
+    required String shrineName,
+  }) async {
+    final db = await _database;
+
+    final count = await db.update(
+      SqliteConstants.shrinesTable,
+      {SqliteConstants.colIsDeleted: 1},
+      where: '${SqliteConstants.colShrineName} = ? AND ${SqliteConstants.colIsDeleted} = 0',
+      whereArgs: [shrineName],
+    );
+
+    if (count == 0) {
+      throw StateError('No shrine found with name "$shrineName"');
+    }
+
+    await _stampLastUpdate();
+  }
+
+  // ---------------------------------------------------------------------------
   // 4. Read all ledger records — aggregated summary
   // ---------------------------------------------------------------------------
 

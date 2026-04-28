@@ -60,6 +60,45 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
     _editing = false;
   });
 
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete shrine'),
+        content: Text(
+          'Are you sure you want to delete "${widget.shrine.name}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    // Show a modal loader that blocks all interaction.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await SqliteHelpers.softDeleteShrine(shrineName: widget.shrine.name);
+      await SyncHelpers.localToRemote();
+    } finally {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   Future<void> _confirm() async {
     final newName = _nameController.text;
     final newColor = _currentColor;
@@ -131,25 +170,53 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
   /// Normal state — coloured button with pencil icon + shrine name.
   Widget _buildDisplayMode(Color bgColor, Color fgColor) {
-    return ElevatedButton(
-      onPressed: _enterEditMode,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: bgColor,
-        foregroundColor: fgColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.edit, size: 18, color: fgColor),
-          const SizedBox(width: 10),
-          Text(
-            widget.shrine.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    return Row(
+      children: [
+        Expanded(
+          flex: 4,
+          child: ElevatedButton(
+            onPressed: _enterEditMode,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: bgColor,
+              foregroundColor: fgColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.edit, size: 18, color: fgColor),
+                const SizedBox(width: 10),
+                Text(
+                  widget.shrine.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          flex: 1,
+          child: ElevatedButton(
+            onPressed: _confirmDelete,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[300],
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+            ),
+            child: Icon(Icons.close, size: 24, color: Colors.red[200]),
+          ),
+        ),
+      ],
     );
   }
 
