@@ -6,9 +6,6 @@ import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
 import 'package:my_shrine/widgets/color_picker_widget.dart';
 
-/// Callback fired when the user successfully creates a new shrine.
-typedef ShrineCreatedCallback = void Function(String name, String colorHex);
-
 /// A widget that displays a grey "add" button.
 ///
 /// Tapping the button switches to **create mode**: an empty text field for the
@@ -21,9 +18,14 @@ typedef ShrineCreatedCallback = void Function(String name, String colorHex);
 /// state without creating anything.
 class ShrineCreatorWidget extends StatefulWidget {
   /// Called with the new shrine name and RRGGBB colour when creation succeeds.
-  final ShrineCreatedCallback? onCreated;
+  final void Function(String name, String colorHex)? onCreated;
+  final void Function(String)? onExistingShrineFound;
 
-  const ShrineCreatorWidget({super.key, this.onCreated});
+  const ShrineCreatorWidget({
+    super.key,
+    this.onCreated,
+    this.onExistingShrineFound,
+  });
 
   @override
   State<ShrineCreatorWidget> createState() => _ShrineCreatorWidgetState();
@@ -96,15 +98,20 @@ class _ShrineCreatorWidgetState extends State<ShrineCreatorWidget> {
 
     try {
       // Persist the new shrine to local SQLite.
-      await SqliteHelpers.addShrine(
+      String result = await SqliteHelpers.addShrine(
         shrineName: name,
         shrineColor: _currentColor,
       );
 
-      // Sync local DB to Firestore.
-      await SyncHelpers.localToRemote();
+      if (result == '') {
+        widget.onExistingShrineFound?.call(name);
+        _showAlert("Shrine $name already exists");
+      } else {
+        // Sync local DB to Firestore.
+        await SyncHelpers.localToRemote();
 
-      widget.onCreated?.call(name, _currentColor);
+        widget.onCreated?.call(name, _currentColor);
+      }
       setState(() => _creating = false);
     } finally {
       // Dismiss the loader.

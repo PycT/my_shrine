@@ -24,7 +24,12 @@ class ShrineEditorWidget extends StatefulWidget {
   /// When true, shows a flower icon instead of the pencil until next state change.
   final bool isNew;
 
-  const ShrineEditorWidget({super.key, required this.shrine, this.onEdited, this.isNew = false});
+  const ShrineEditorWidget({
+    super.key,
+    required this.shrine,
+    this.onEdited,
+    this.isNew = false,
+  });
 
   @override
   State<ShrineEditorWidget> createState() => _ShrineEditorWidgetState();
@@ -199,7 +204,11 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(_isNew ? Icons.local_florist : Icons.edit, size: 18, color: fgColor),
+                Icon(
+                  _isNew ? Icons.local_florist : Icons.edit,
+                  size: 18,
+                  color: fgColor,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   widget.shrine.name,

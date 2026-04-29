@@ -132,7 +132,10 @@ class SqliteHelpers {
   /// Returns a list of maps, each containing `shrine_name` and `shrine_color`.
   static Future<List<Map<String, dynamic>>> getUserShrines() async {
     final db = await _database;
-    return db.query(SqliteConstants.shrinesTable);
+    return db.query(
+      SqliteConstants.shrinesTable,
+      where: '${SqliteConstants.colIsDeleted} = 0',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -147,15 +150,32 @@ class SqliteHelpers {
     required String shrineColor,
   }) async {
     final db = await _database;
-    await db.insert(
+
+    final existing = await db.query(
       SqliteConstants.shrinesTable,
-      {
-        SqliteConstants.colShrineName: shrineName,
-        SqliteConstants.colShrineColor: shrineColor,
-        SqliteConstants.colIsDeleted: 0,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: '${SqliteConstants.colShrineName} = ?',
+      whereArgs: [shrineName],
     );
+    if (existing.isNotEmpty) {
+      final isDeleted = existing.first[SqliteConstants.colIsDeleted] as int;
+      if (isDeleted == 1) {
+        await db.update(
+          SqliteConstants.shrinesTable,
+          {SqliteConstants.colIsDeleted: 0},
+          where: '${SqliteConstants.colShrineName} = ?',
+          whereArgs: [shrineName],
+        );
+        await _stampLastUpdate();
+        return shrineName;
+      }
+      return '';
+    }
+
+    await db.insert(SqliteConstants.shrinesTable, {
+      SqliteConstants.colShrineName: shrineName,
+      SqliteConstants.colShrineColor: shrineColor,
+      SqliteConstants.colIsDeleted: 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     await _stampLastUpdate();
     return shrineName;
   }
@@ -201,15 +221,12 @@ class SqliteHelpers {
         SqliteConstants.colShrineName: newName,
         SqliteConstants.colShrineColor:
             newColor ?? oldRow[SqliteConstants.colShrineColor],
-        SqliteConstants.colIsDeleted:
-            oldRow[SqliteConstants.colIsDeleted] ?? 0,
+        SqliteConstants.colIsDeleted: oldRow[SqliteConstants.colIsDeleted] ?? 0,
       });
     } else if (newColor != null) {
       await db.update(
         SqliteConstants.shrinesTable,
-        {
-          SqliteConstants.colShrineColor: newColor,
-        },
+        {SqliteConstants.colShrineColor: newColor},
         where: '${SqliteConstants.colShrineName} = ?',
         whereArgs: [currentName],
       );
@@ -224,15 +241,14 @@ class SqliteHelpers {
   /// Sets `is_deleted = 1` on the shrine identified by [shrineName].
   ///
   /// Throws a [StateError] if no shrine with [shrineName] exists.
-  static Future<void> softDeleteShrine({
-    required String shrineName,
-  }) async {
+  static Future<void> softDeleteShrine({required String shrineName}) async {
     final db = await _database;
 
     final count = await db.update(
       SqliteConstants.shrinesTable,
       {SqliteConstants.colIsDeleted: 1},
-      where: '${SqliteConstants.colShrineName} = ? AND ${SqliteConstants.colIsDeleted} = 0',
+      where:
+          '${SqliteConstants.colShrineName} = ? AND ${SqliteConstants.colIsDeleted} = 0',
       whereArgs: [shrineName],
     );
 
@@ -274,8 +290,9 @@ class SqliteHelpers {
     for (final row in rows) {
       final shrineName = row[SqliteConstants.colShrineName] as String;
       final seconds = row[SqliteConstants.colSecondsTracked] as int;
-      final date =
-          DateTime.parse(row[SqliteConstants.colStartTimestamp] as String);
+      final date = DateTime.parse(
+        row[SqliteConstants.colStartTimestamp] as String,
+      );
 
       final dateKey = switch (granularity) {
         DateGranularity.day =>
@@ -355,9 +372,7 @@ class SqliteHelpers {
     final db = await _database;
     final count = await db.update(
       SqliteConstants.ledgerTable,
-      {
-        SqliteConstants.colSecondsTracked: secondsTracked,
-      },
+      {SqliteConstants.colSecondsTracked: secondsTracked},
       where:
           '${SqliteConstants.colShrineName} = ? AND ${SqliteConstants.colStartTimestamp} = ?',
       whereArgs: [shrineName, startTimestamp.toIso8601String()],
@@ -447,15 +462,11 @@ class SqliteHelpers {
     required int isDeleted,
   }) async {
     final db = await _database;
-    await db.insert(
-      SqliteConstants.shrinesTable,
-      {
-        SqliteConstants.colShrineName: shrineName,
-        SqliteConstants.colShrineColor: shrineColor,
-        SqliteConstants.colIsDeleted: isDeleted,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(SqliteConstants.shrinesTable, {
+      SqliteConstants.colShrineName: shrineName,
+      SqliteConstants.colShrineColor: shrineColor,
+      SqliteConstants.colIsDeleted: isDeleted,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Inserts a ledger row with explicit `is_deleted` value.

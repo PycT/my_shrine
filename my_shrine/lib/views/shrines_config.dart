@@ -43,6 +43,11 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
     _shrineEditors.value = [shrine, ..._shrineEditors.value];
   }
 
+  void markShrineAsNew(String name) {
+    _newShrineNames.add(name);
+    _shrineEditors.value = [..._shrineEditors.value];
+  }
+
   List<Widget> _buildShrineEditors(List<Shrine> shrines) {
     final sorted = List<Shrine>.from(shrines)
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -51,7 +56,9 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
           (shrine) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: ShrineEditorWidget(
-              key: ValueKey(shrine.name),
+              key: ValueKey(
+                '${shrine.name}_${_newShrineNames.contains(shrine.name)}',
+              ),
               shrine: shrine,
               isNew: _newShrineNames.contains(shrine.name),
             ),
@@ -70,6 +77,9 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
             ShrineCreatorWidget(
               onCreated: (name, colorHex) {
                 addShrine(Shrine(name: name, color: colorHex));
+              },
+              onExistingShrineFound: (name) {
+                markShrineAsNew(name);
               },
             ),
             SizedBox(height: AppStyles.verticalSeparatorHeight),
