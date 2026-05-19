@@ -94,7 +94,7 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
           ],
         ),
       ),
-      bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
+      bottomNavigationBar: const CommonNavigationBar(currentIndex: 3),
     );
   }
 }

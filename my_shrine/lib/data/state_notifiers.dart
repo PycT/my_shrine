@@ -13,4 +13,6 @@ class StateNotifiers {
   static ValueNotifier<int> secondsCounted = ValueNotifier(0);
 
   static ValueNotifier<Shrine> currentShrine = ValueNotifier(defaultShrine);
+
+  static ValueNotifier<DateTime> startTimestamp = ValueNotifier(DateTime.now());
 }

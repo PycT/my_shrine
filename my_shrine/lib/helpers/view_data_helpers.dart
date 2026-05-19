@@ -7,6 +7,7 @@ import 'package:my_shrine/data/default_shrines.dart';
 import 'package:my_shrine/data/sqlite_constants.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/entities/time_ledger.dart';
 import 'package:my_shrine/helpers/firestore_helpers.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
@@ -17,6 +18,8 @@ import 'package:my_shrine/helpers/sync_helpers.dart';
 /// **Methods:**
 /// - [trackerViewPreload] — returns the list of [Shrine]s for the TrackerView
 ///   after performing the necessary local/remote DB initialisation and sync.
+/// - [historyViewPreload] — returns the list of [TimeLedger] records from the
+///   local DB, sorted by [TimeLedger.startTimestamp] in descending order.
 class ViewDataHelpers {
   ViewDataHelpers._();
 
@@ -51,23 +54,26 @@ class ViewDataHelpers {
   static List<Shrine> _sqliteRowsToShrines(List<Map<String, dynamic>> rows) {
     return rows
         .where((r) => (r[SqliteConstants.colIsDeleted] as int?) != 1)
-        .map((r) => Shrine(
-              name: r[SqliteConstants.colShrineName] as String,
-              color: r[SqliteConstants.colShrineColor] as String,
-            ))
+        .map(
+          (r) => Shrine(
+            name: r[SqliteConstants.colShrineName] as String,
+            color: r[SqliteConstants.colShrineColor] as String,
+          ),
+        )
         .toList();
   }
 
   /// Converts Firestore shrine docs to [Shrine] objects, filtering out docs
   /// where `is_deleted == true`.
-  static List<Shrine> _firestoreDocsToShrines(
-      List<Map<String, dynamic>> docs) {
+  static List<Shrine> _firestoreDocsToShrines(List<Map<String, dynamic>> docs) {
     return docs
         .where((d) => d['is_deleted'] != true)
-        .map((d) => Shrine(
-              name: d['name'] as String,
-              color: d['shrine_color'] as String,
-            ))
+        .map(
+          (d) => Shrine(
+            name: d['name'] as String,
+            color: d['shrine_color'] as String,
+          ),
+        )
         .toList();
   }
 
@@ -138,8 +144,9 @@ class ViewDataHelpers {
       await SyncHelpers.remoteToLocal();
       await SqliteHelpers.updateTechnicalRecord(lastSync: DateTime.now());
 
-      final remoteShrines =
-          await FirestoreHelpers.getUserShrines(userId: userId);
+      final remoteShrines = await FirestoreHelpers.getUserShrines(
+        userId: userId,
+      );
       return _firestoreDocsToShrines(remoteShrines);
     }
 
@@ -201,5 +208,50 @@ class ViewDataHelpers {
     // Re-read shrines from local DB after sync.
     final updatedRows = await SqliteHelpers.getUserShrines();
     return _sqliteRowsToShrines(updatedRows);
+  }
+
+  // ---------------------------------------------------------------------------
+  // historyViewPreload
+  // ---------------------------------------------------------------------------
+
+  /// Reads all `time_ledger` records and all shrines from the local SQLite
+  /// database. Returns a record containing:
+  /// - a list of [TimeLedger] objects sorted by [TimeLedger.startTimestamp]
+  ///   in descending order (newest first);
+  /// - a [Map] keyed by shrine name with the corresponding shrine color value.
+  ///
+  /// No remote synchronisation is performed — all data comes from the local DB.
+  /// Rows where `is_deleted == 1` are excluded from both collections.
+  static Future<(List<TimeLedger> records, Map<String, String> shrineColors)>
+  historyViewPreload() async {
+    final ledgerRows = await SqliteHelpers.getLedgerRecords();
+    final shrineRows = await SqliteHelpers.getUserShrines();
+
+    final records = ledgerRows
+        .where((r) => (r[SqliteConstants.colIsDeleted] as int?) != 1)
+        .map(
+          (r) => TimeLedger(
+            id: r[SqliteConstants.colId] as int,
+            shrineName: r[SqliteConstants.colShrineName] as String,
+            secondsTracked: r[SqliteConstants.colSecondsTracked] as int,
+            startTimestamp: DateTime.parse(
+              r[SqliteConstants.colStartTimestamp] as String,
+            ),
+          ),
+        )
+        .toList();
+
+    records.sort((a, b) => b.startTimestamp.compareTo(a.startTimestamp));
+
+    final shrineColors = <String, String>{};
+    for (final row in shrineRows) {
+      if ((row[SqliteConstants.colIsDeleted] as int?) != 1) {
+        final name = row[SqliteConstants.colShrineName] as String;
+        final color = row[SqliteConstants.colShrineColor] as String;
+        shrineColors[name] = color;
+      }
+    }
+
+    return (records, shrineColors);
   }
 }

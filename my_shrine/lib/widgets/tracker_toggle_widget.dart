@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/helpers/sqlite_helpers.dart';
+import 'package:my_shrine/helpers/sync_helpers.dart';
 
 class TrackerToggleWidget extends StatefulWidget {
   const TrackerToggleWidget({super.key});
@@ -23,10 +25,18 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
   void _toggle() {
     if (_running) {
       _timer?.cancel();
+      // Persist the tracked session and sync to remote.
+      SqliteHelpers.addLedgerRecord(
+        shrineName: StateNotifiers.currentShrine.value.name,
+        secondsTracked: StateNotifiers.secondsCounted.value,
+        startTimestamp: StateNotifiers.startTimestamp.value,
+      ).then((_) => SyncHelpers.localToRemote());
     } else {
+      StateNotifiers.secondsCounted.value = 0;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         StateNotifiers.secondsCounted.value++;
       });
+      StateNotifiers.startTimestamp.value = DateTime.now();
     }
     setState(() => _running = !_running);
   }

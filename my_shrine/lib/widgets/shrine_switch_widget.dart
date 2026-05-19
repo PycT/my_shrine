@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
+import 'package:my_shrine/helpers/sqlite_helpers.dart';
+import 'package:my_shrine/helpers/sync_helpers.dart';
 
 class ShrineSwitchWidget extends StatelessWidget {
   final Shrine shrine;
@@ -10,7 +12,15 @@ class ShrineSwitchWidget extends StatelessWidget {
   void _onTap() {
     final previous = StateNotifiers.currentShrine.value;
     if (previous.name != shrine.name) {
-      StateNotifiers.secondsCounted.value = 0;
+      if (StateNotifiers.secondsCounted.value > 0) {
+        SqliteHelpers.addLedgerRecord(
+          shrineName: StateNotifiers.currentShrine.value.name,
+          secondsTracked: StateNotifiers.secondsCounted.value,
+          startTimestamp: StateNotifiers.startTimestamp.value,
+        ).then((_) => SyncHelpers.localToRemote());
+        StateNotifiers.secondsCounted.value = 0;
+        StateNotifiers.startTimestamp.value = DateTime.now();
+      }
     }
     StateNotifiers.currentShrine.value = shrine;
   }

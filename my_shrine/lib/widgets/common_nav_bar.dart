@@ -2,15 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:my_shrine/views/tracker_view.dart';
 import 'package:my_shrine/views/shrines_config.dart';
 import 'package:my_shrine/views/stats_view.dart';
+import 'package:my_shrine/views/history_view.dart';
 
-/// A reusable bottom navigation bar with three tabs:
-/// Home (TrackerView), Stats, and Config.
-///
-/// [currentIndex] indicates which tab is currently active (0 = Home,
-/// 1 = Stats, 2 = Config). The active tab's icon appears muted to convey
-/// "you are already here".
 class CommonNavigationBar extends StatelessWidget {
-  /// Index of the currently active page (0 = Home, 1 = Stats, 2 = Config).
   final int currentIndex;
 
   const CommonNavigationBar({super.key, required this.currentIndex});
@@ -27,6 +21,9 @@ class CommonNavigationBar extends StatelessWidget {
         destination = const TrackerViewPage();
         break;
       case 2:
+        destination = const HistoryViewPage();
+        break;
+      case 3:
         destination = const ShrinesConfigPage();
         break;
       default:
@@ -48,6 +45,7 @@ class CommonNavigationBar extends StatelessWidget {
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Stats'),
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Config'),
       ],
     );
