@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "806995303188-3u6c2h1e61k4c2s6qbsv9qs896pgct06.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yellowcup.my_shrine",
+            "certificate_hash": "100dd337b7e0de819bfb1716ffbe09efc679955e"
+          }
+        },
+        {
+          "client_id": "806995303188-g4qaafdmamuakr1csmqi86fh9bi5sv8o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yellowcup.my_shrine",
+            "certificate_hash": "5c6ba1f7d8096a86a5cf3a5acd218f80d075079b"
+          }
+        },
+        {
           "client_id": "806995303188-hkqdrn2tlk86eceau7ecmorb1grnhktv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
