@@ -10,7 +10,7 @@
 .agents/
 prompts/
 .env
-
+GEMINI.md
 
 # Flutter repo-specific
 /bin/cache/
