@@ -28,11 +28,23 @@ class TrackerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Shrine>>(
-      future: ViewDataHelpers.trackerViewPreload(context),
+      future: ViewDataHelpers.trackerViewPreload(
+        onError: (msg) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(msg),
+                duration: const Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
       builder: (context, snapshot) {
         final shrines = snapshot.data ?? defaultShrinesList;
         return Scaffold(
-          appBar: CommonAppBar(title: "It is a great day!"),
+          appBar: CommonAppBar(),
           body: SafeArea(
             child: Center(
               child: Column(

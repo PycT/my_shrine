@@ -1,9 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:my_shrine/data/sqlite_constants.dart';
-
-/// Granularity for date-based aggregation in [SqliteHelpers.getLedgerSummary].
-enum DateGranularity { day, month, year }
+import 'package:my_shrine/entities/date_granularity.dart';
 
 /// A utility class providing static methods to read from and write to local
 /// SQLite storage.

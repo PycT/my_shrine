@@ -1,16 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:my_shrine/data/default_shrines.dart';
+import 'package:my_shrine/data/firestore_constants.dart';
 import 'package:my_shrine/data/sqlite_constants.dart';
-import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/entities/time_ledger.dart';
 import 'package:my_shrine/helpers/firestore_helpers.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/utils/user_helpers.dart';
 
 /// Provides static methods that populate the data structures used by the main
 /// application views.
@@ -27,39 +27,12 @@ class ViewDataHelpers {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  /// Returns the current user's email (used as the Firestore document ID).
-  ///
-  /// Throws a [StateError] if no user is signed in or the user has no email.
-  static String _requireUserId() {
-    final user = StateNotifiers.user.value;
-    if (user == null || user.email == null) {
-      throw StateError('No signed-in user or user has no email');
-    }
-    return user.email!;
-  }
-
-  /// Shows a floating [SnackBar] with [message] for 3 seconds.
-  static void _showAlert(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   /// Converts SQLite shrine rows to [Shrine] objects, filtering out rows
   /// where `is_deleted == 1`.
   static List<Shrine> _sqliteRowsToShrines(List<Map<String, dynamic>> rows) {
     return rows
         .where((r) => (r[SqliteConstants.colIsDeleted] as int?) != 1)
-        .map(
-          (r) => Shrine(
-            name: r[SqliteConstants.colShrineName] as String,
-            color: r[SqliteConstants.colShrineColor] as String,
-          ),
-        )
+        .map((r) => Shrine.fromSqliteRow(r))
         .toList();
   }
 
@@ -67,13 +40,8 @@ class ViewDataHelpers {
   /// where `is_deleted == true`.
   static List<Shrine> _firestoreDocsToShrines(List<Map<String, dynamic>> docs) {
     return docs
-        .where((d) => d['is_deleted'] != true)
-        .map(
-          (d) => Shrine(
-            name: d['name'] as String,
-            color: d['shrine_color'] as String,
-          ),
-        )
+        .where((d) => d[FirestoreConstants.fieldIsDeleted] != true)
+        .map((d) => Shrine.fromFirestoreDoc(d))
         .toList();
   }
 
@@ -89,22 +57,24 @@ class ViewDataHelpers {
   /// **1a – Local DB does not exist:**
   ///  1. Initialise the local DB and seed default shrines.
   ///  2. Try to read the remote user collection:
-  ///     - *Error* → show alert, return default shrines.
+  ///     - *Error* → call [onError], return default shrines.
   ///     - *Not found* → initialise remote, stamp `last_sync`, return defaults.
   ///     - *Found* → remote→local sync, stamp `last_sync`, return remote shrines.
   ///
   /// **1b – Local DB exists:**
   ///  1. Read `last_sync` from `technical_records`.
   ///  2. Try to read the remote user collection:
-  ///     - *Error* → show alert, return local shrines.
+  ///     - *Error* → call [onError], return local shrines.
   ///     - *Not found* → initialise remote, local→remote sync, stamp
   ///       `last_sync`, return local shrines.
   ///     - *Found* → compare `last_sync` with remote `last_update`:
   ///       - `last_sync >= last_update` → return local shrines.
   ///       - Otherwise → remote→local sync, stamp `last_sync`, return updated
   ///         shrines.
-  static Future<List<Shrine>> trackerViewPreload(BuildContext context) async {
-    final userId = _requireUserId();
+  static Future<List<Shrine>> trackerViewPreload({
+    void Function(String message)? onError,
+  }) async {
+    final userId = requireUserId();
 
     final dbPath = join(await getDatabasesPath(), SqliteConstants.dbName);
     final dbExists = await databaseExists(dbPath);
@@ -129,7 +99,7 @@ class ViewDataHelpers {
         remoteUser = await FirestoreHelpers.getUser(userId: userId);
       } catch (e) {
         // 1a.1a – Error accessing remote DB.
-        if (context.mounted) _showAlert(context, e.toString());
+        onError?.call(e.toString());
         return List<Shrine>.from(defaultShrinesList);
       }
 
@@ -172,7 +142,7 @@ class ViewDataHelpers {
       remoteUser = await FirestoreHelpers.getUser(userId: userId);
     } catch (e) {
       // 1b.1a – Error accessing remote DB.
-      if (context.mounted) _showAlert(context, e.toString());
+      onError?.call(e.toString());
       return localShrines;
     }
 
@@ -185,7 +155,8 @@ class ViewDataHelpers {
     }
 
     // 1b.1c – Remote user collection found.
-    final remoteLastUpdate = remoteUser['last_update'];
+    final remoteLastUpdate =
+        remoteUser[FirestoreConstants.fieldLastUpdate];
 
     // Convert Firestore Timestamp to DateTime for comparison.
     DateTime? remoteUpdateTime;
@@ -229,16 +200,7 @@ class ViewDataHelpers {
 
     final records = ledgerRows
         .where((r) => (r[SqliteConstants.colIsDeleted] as int?) != 1)
-        .map(
-          (r) => TimeLedger(
-            id: r[SqliteConstants.colId] as int,
-            shrineName: r[SqliteConstants.colShrineName] as String,
-            secondsTracked: r[SqliteConstants.colSecondsTracked] as int,
-            startTimestamp: DateTime.parse(
-              r[SqliteConstants.colStartTimestamp] as String,
-            ),
-          ),
-        )
+        .map((r) => TimeLedger.fromSqliteRow(r))
         .toList();
 
     records.sort((a, b) => b.startTimestamp.compareTo(a.startTimestamp));

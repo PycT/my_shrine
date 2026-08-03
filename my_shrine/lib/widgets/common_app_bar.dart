@@ -6,7 +6,7 @@ import 'package:my_shrine/data/app_styles.dart';
 class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
 
-  const CommonAppBar({super.key, required this.title});
+  const CommonAppBar({super.key, this.title = 'It is a great day!'});
 
   @override
   Size get preferredSize =>

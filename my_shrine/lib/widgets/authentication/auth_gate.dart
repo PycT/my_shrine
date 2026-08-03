@@ -4,10 +4,7 @@ import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/views/authentication/sign_in_page.dart';
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({
-    super.key,
-    required this.page
-  });
+  const AuthGate({super.key, required this.page});
 
   final Widget page;
 
@@ -19,8 +16,16 @@ class AuthGate extends StatelessWidget {
         if (!snapshot.hasData) {
           return SignInPage();
         } else {
-            StateNotifiers.user.value = snapshot.data!;
-            return page;
+          // Only update the notifier when the value actually changes to avoid
+          // triggering unnecessary rebuilds.
+          final user = snapshot.data!;
+          if (StateNotifiers.user.value?.uid != user.uid) {
+            // Schedule the state mutation for after the current build frame.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              StateNotifiers.user.value = user;
+            });
+          }
+          return page;
         }
       },
     );

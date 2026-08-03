@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/entities/time_ledger.dart';
 import 'package:my_shrine/helpers/view_data_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
+import 'package:my_shrine/utils/time_format_utils.dart';
 import 'package:my_shrine/widgets/authentication/auth_gate.dart';
 import 'package:my_shrine/widgets/common_app_bar.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
@@ -25,14 +27,14 @@ class HistoryView extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return Scaffold(
-            appBar: CommonAppBar(title: "It is a great day!"),
+            appBar: CommonAppBar(),
             body: const Center(child: CircularProgressIndicator()),
             bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
           );
         }
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: CommonAppBar(title: "It is a great day!"),
+            appBar: CommonAppBar(),
             body: Center(child: Text('Error: ${snapshot.error}')),
             bottomNavigationBar: const CommonNavigationBar(currentIndex: 2),
           );
@@ -40,7 +42,7 @@ class HistoryView extends StatelessWidget {
         final (timeLedger, shrineColors) =
             snapshot.data ?? (<TimeLedger>[], <String, String>{});
         return Scaffold(
-          appBar: CommonAppBar(title: "It is a great day!"),
+          appBar: CommonAppBar(),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -53,27 +55,28 @@ class HistoryView extends StatelessWidget {
     );
   }
 
-  String timeBuilder(int secondsTracked) {
-    final hours = secondsTracked ~/ 3600;
-    final minutes = (secondsTracked % 3600) ~/ 60;
-    final seconds = secondsTracked % 60;
-    return "$hours:$minutes:$seconds";
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-'
+        '${dt.day.toString().padLeft(2, '0')}';
   }
 
-  String hourBuilder(DateTime startTimestamp) {
-    return startTimestamp.toString().substring(10, 19);
+  String _formatTime(DateTime ts) {
+    return '${ts.hour.toString().padLeft(2, '0')}:'
+        '${ts.minute.toString().padLeft(2, '0')}:'
+        '${ts.second.toString().padLeft(2, '0')}';
   }
 
   Widget logEntryCard(TimeLedger ledger, Map<String, String> shrineColors) {
+    final colorHex = shrineColors[ledger.shrineName] ?? 'E0E0E0';
     return Card(
-      color: Color(int.parse("0xFF${shrineColors[ledger.shrineName] ?? 0}")),
+      color: hexToColor(colorHex),
       child: ListTile(
         title: Text(
-          "${hourBuilder(ledger.startTimestamp)} - ${ledger.shrineName}",
+          "${_formatTime(ledger.startTimestamp)} - ${ledger.shrineName}",
         ),
         subtitle: Center(
           child: Text(
-            timeBuilder(ledger.secondsTracked),
+            formatDuration(ledger.secondsTracked),
             style: AppStyles.timeLedgerLogCardSubtitleTextStyle,
           ),
         ),
@@ -86,21 +89,25 @@ class HistoryView extends StatelessWidget {
     Map<String, String> shrineColors,
   ) {
     List<Widget> result = [];
-    DateTime now = DateTime(2000, 1, 1); //DateTime.now();
+    // Sentinel date that will never match a real entry, ensuring the first
+    // record always gets a date header.
+    DateTime lastDateShown = DateTime(1970);
     for (final ledger in timeLedger) {
-      if (ledger.startTimestamp.day != now.day) {
+      if (ledger.startTimestamp.day != lastDateShown.day ||
+          ledger.startTimestamp.month != lastDateShown.month ||
+          ledger.startTimestamp.year != lastDateShown.year) {
         result.add(
           Container(
             padding: EdgeInsets.all(8),
             child: Center(
               child: Text(
-                ledger.startTimestamp.toString().substring(0, 10),
+                _formatDate(ledger.startTimestamp),
                 style: AppStyles.timeLedgerDatecardTextStyle,
               ),
             ),
           ),
         );
-        now = ledger.startTimestamp;
+        lastDateShown = ledger.startTimestamp;
       }
       result.add(logEntryCard(ledger, shrineColors));
     }

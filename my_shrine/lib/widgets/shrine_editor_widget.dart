@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
 import 'package:my_shrine/widgets/color_picker_widget.dart';
 
 /// Callback fired when the user finishes editing the shrine.
@@ -56,12 +57,6 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
     super.dispose();
   }
 
-  Color _hexToColor(String hex) => Color(int.parse('FF$hex', radix: 16));
-
-  Color _foregroundFor(Color bg) =>
-      ThemeData.estimateBrightnessForColor(bg) == Brightness.light
-      ? Colors.black
-      : Colors.white;
 
   void _enterEditMode() => setState(() {
     _isNew = false;
@@ -138,8 +133,6 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
       widget.onEdited?.call(newName, newColor);
       setState(() {
-        widget.shrine.name = newName;
-        widget.shrine.color = newColor;
         _editing = false;
       });
     } finally {
@@ -176,8 +169,8 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   Widget build(BuildContext context) {
     if (_deleted) return const SizedBox.shrink();
 
-    final bgColor = _hexToColor(_currentColor);
-    final fgColor = _foregroundFor(bgColor);
+    final bgColor = hexToColor(_currentColor);
+    final fgColor = foregroundFor(bgColor);
 
     if (_editing) {
       return _buildEditMode(bgColor, fgColor);

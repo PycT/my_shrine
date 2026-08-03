@@ -2,6 +2,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:my_shrine/entities/time_ledger.dart';
 import 'package:my_shrine/helpers/view_data_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
+import 'package:my_shrine/utils/time_format_utils.dart';
 import 'package:my_shrine/widgets/authentication/auth_gate.dart';
 import 'package:my_shrine/widgets/common_app_bar.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
@@ -242,14 +244,8 @@ class _StatsViewState extends State<StatsView> {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  String _formatSeconds(int totalSeconds) {
-    final h = totalSeconds ~/ 3600;
-    final m = (totalSeconds % 3600) ~/ 60;
-    final s = totalSeconds % 60;
-    return '${h.toString().padLeft(2, '0')}:'
-        '${m.toString().padLeft(2, '0')}:'
-        '${s.toString().padLeft(2, '0')}';
-  }
+  // Delegates to the shared utility.
+  String _formatSeconds(int totalSeconds) => formatDuration(totalSeconds);
 
   String _periodLabel() {
     const monthNames = [
@@ -278,7 +274,7 @@ class _StatsViewState extends State<StatsView> {
   Color _shrineColor(String shrineName) {
     final hex = _shrineColors?[shrineName];
     if (hex != null && hex.length == 6) {
-      return Color(int.parse('0xFF$hex'));
+      return hexToColor(hex);
     }
     return Colors.grey;
   }
@@ -291,14 +287,14 @@ class _StatsViewState extends State<StatsView> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: CommonAppBar(title: "It is a great day!"),
+        appBar: CommonAppBar(),
         body: const Center(child: CircularProgressIndicator()),
         bottomNavigationBar: const CommonNavigationBar(currentIndex: 0),
       );
     }
     if (_error != null) {
       return Scaffold(
-        appBar: CommonAppBar(title: "It is a great day!"),
+        appBar: CommonAppBar(),
         body: Center(child: Text('Error: $_error')),
         bottomNavigationBar: const CommonNavigationBar(currentIndex: 0),
       );
@@ -309,7 +305,7 @@ class _StatsViewState extends State<StatsView> {
     final totalSeconds = aggregated.fold<int>(0, (sum, e) => sum + e.seconds);
 
     return Scaffold(
-      appBar: CommonAppBar(title: "It is a great day!"),
+      appBar: CommonAppBar(),
       body: SafeArea(
         child: Column(
           children: [

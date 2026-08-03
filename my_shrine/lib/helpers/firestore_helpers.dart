@@ -3,6 +3,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:my_shrine/data/firestore_constants.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/data/default_shrines.dart';
+import 'package:my_shrine/entities/date_granularity.dart';
+import 'package:my_shrine/utils/user_helpers.dart';
 
 /// A utility class providing static methods to read from and write to Firestore.
 ///
@@ -53,15 +55,15 @@ import 'package:my_shrine/data/default_shrines.dart';
 /// - [addLedgerRecord]     — adds a new time-tracking entry (auto-ID).
 /// - [hasLedgerRecord]     — checks if a record exists for shrine + timestamp.
 /// - [updateLedgerSeconds] — updates seconds on a matching ledger record.
-/// Granularity for date-based aggregation in [FirestoreHelpers.getLedgerSummary].
-enum DateGranularity { day, month, year }
-
 class FirestoreHelpers {
   // Private constructor — this class should not be instantiated.
   FirestoreHelpers._();
 
   /// Reference to the Firestore instance.
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  /// Cached device name so we don't re-read DeviceInfoPlugin on every write.
+  static String? _cachedDeviceName;
 
   // ---------------------------------------------------------------------------
   // Helper: collection references
@@ -87,13 +89,12 @@ class FirestoreHelpers {
   ///
   /// Called internally by every writing method so the user document always
   /// reflects the most recent write. The device name is read from the
-  /// Android system via `device_info_plus`.
+  /// Android system via `device_info_plus` and cached for subsequent calls.
   static Future<void> _stampUserDoc(String userId) async {
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    final deviceName = androidInfo.model;
+    _cachedDeviceName ??= (await DeviceInfoPlugin().androidInfo).model;
     await userDocRef(userId).set({
-      'last_update': FieldValue.serverTimestamp(),
-      'last_device_id': deviceName,
+      FirestoreConstants.fieldLastUpdate: FieldValue.serverTimestamp(),
+      FirestoreConstants.fieldLastDeviceId: _cachedDeviceName,
     }, SetOptions(merge: true));
   }
 
@@ -115,15 +116,14 @@ class FirestoreHelpers {
   /// Throws a [StateError] if no user is currently signed in or the user has
   /// no email.
   static Future<void> init() async {
-    final user = StateNotifiers.user.value;
-    if (user == null || user.email == null) {
-      throw StateError('No signed-in user or user has no email');
-    }
-    final userId = user.email!;
+    final userId = requireUserId();
 
     // Check if the user document already exists and is initialised.
     final existing = await getUser(userId: userId);
-    if (existing != null && existing['is_initialized'] == true) return;
+    if (existing != null &&
+        existing[FirestoreConstants.fieldIsInitialized] == true) {
+      return;
+    }
 
     // Create the user document (merge-safe).
     await createUser(userId: userId);
@@ -140,7 +140,7 @@ class FirestoreHelpers {
     // Mark the user as initialised.
     await updateUser(
       userId: userId,
-      data: {'is_initialized': true},
+      data: {FirestoreConstants.fieldIsInitialized: true},
     );
   }
 
@@ -155,7 +155,7 @@ class FirestoreHelpers {
   /// Uses `merge: true` so existing sub-collections are not affected.
   static Future<void> createUser({required String userId}) async {
     await userDocRef(userId).set({
-      'is_initialized': false,
+      FirestoreConstants.fieldIsInitialized: false,
     }, SetOptions(merge: true));
     await _stampUserDoc(userId);
   }
@@ -224,8 +224,10 @@ class FirestoreHelpers {
     final data = snapshot.data() as Map<String, dynamic>?;
     if (data == null) return null;
     return {
-      'last_update': data['last_update'],
-      'last_device_id': data['last_device_id'],
+      FirestoreConstants.fieldLastUpdate:
+          data[FirestoreConstants.fieldLastUpdate],
+      FirestoreConstants.fieldLastDeviceId:
+          data[FirestoreConstants.fieldLastDeviceId],
     };
   }
 
@@ -263,15 +265,15 @@ class FirestoreHelpers {
     // Enforce uniqueness on the `name` field.
     final existing = await shrinesRef(
       userId,
-    ).where('name', isEqualTo: shrineName).limit(1).get();
+    ).where(FirestoreConstants.fieldShrineName, isEqualTo: shrineName).limit(1).get();
     if (existing.docs.isNotEmpty) {
       throw StateError('A shrine named "$shrineName" already exists');
     }
 
     final docRef = await shrinesRef(userId).add({
-      'name': shrineName,
-      'shrine_color': shrineColor,
-      'is_deleted': false,
+      FirestoreConstants.fieldShrineName: shrineName,
+      FirestoreConstants.fieldShrineColor: shrineColor,
+      FirestoreConstants.fieldIsDeleted: false,
     });
     await _stampUserDoc(userId);
     return docRef.id;
@@ -297,15 +299,15 @@ class FirestoreHelpers {
     String? newColor,
   }) async {
     final updates = <String, dynamic>{
-      if (newName != null) 'name': newName,
-      if (newColor != null) 'shrine_color': newColor,
+      if (newName != null) FirestoreConstants.fieldShrineName: newName,
+      if (newColor != null) FirestoreConstants.fieldShrineColor: newColor,
     };
     if (updates.isEmpty) return;
 
     // Find the document by its `name` field.
     final snapshot = await shrinesRef(
       userId,
-    ).where('name', isEqualTo: currentName).limit(1).get();
+    ).where(FirestoreConstants.fieldShrineName, isEqualTo: currentName).limit(1).get();
 
     if (snapshot.docs.isEmpty) {
       throw StateError('No shrine found with name "$currentName"');
@@ -315,7 +317,7 @@ class FirestoreHelpers {
     if (newName != null && newName != currentName) {
       final conflict = await shrinesRef(
         userId,
-      ).where('name', isEqualTo: newName).limit(1).get();
+      ).where(FirestoreConstants.fieldShrineName, isEqualTo: newName).limit(1).get();
       if (conflict.docs.isNotEmpty) {
         throw StateError('A shrine named "$newName" already exists');
       }
@@ -357,9 +359,9 @@ class FirestoreHelpers {
     for (final doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>;
 
-      final shrineName = data['shrine_name'] as String;
-      final seconds = (data['seconds_tracked'] as num).toInt();
-      final timestamp = data['start_timestamp'] as Timestamp;
+      final shrineName = data[FirestoreConstants.fieldLedgerShrineName] as String;
+      final seconds = (data[FirestoreConstants.fieldSecondsTracked] as num).toInt();
+      final timestamp = data[FirestoreConstants.fieldStartTimestamp] as Timestamp;
       final date = timestamp.toDate();
 
       final dateKey = switch (granularity) {
@@ -392,10 +394,10 @@ class FirestoreHelpers {
     required Timestamp startTimestamp,
   }) async {
     final docRef = await ledgerRef(userId).add({
-      'seconds_tracked': secondsTracked,
-      'shrine_name': shrineName,
-      'start_timestamp': startTimestamp,
-      'is_deleted': false,
+      FirestoreConstants.fieldSecondsTracked: secondsTracked,
+      FirestoreConstants.fieldLedgerShrineName: shrineName,
+      FirestoreConstants.fieldStartTimestamp: startTimestamp,
+      FirestoreConstants.fieldIsDeleted: false,
     });
     await _stampUserDoc(userId);
     return docRef.id;
@@ -413,8 +415,8 @@ class FirestoreHelpers {
     required Timestamp startTimestamp,
   }) async {
     final snapshot = await ledgerRef(userId)
-        .where('shrine_name', isEqualTo: shrineName)
-        .where('start_timestamp', isEqualTo: startTimestamp)
+        .where(FirestoreConstants.fieldLedgerShrineName, isEqualTo: shrineName)
+        .where(FirestoreConstants.fieldStartTimestamp, isEqualTo: startTimestamp)
         .limit(1)
         .get();
 
@@ -436,8 +438,8 @@ class FirestoreHelpers {
     required int secondsTracked,
   }) async {
     final snapshot = await ledgerRef(userId)
-        .where('shrine_name', isEqualTo: shrineName)
-        .where('start_timestamp', isEqualTo: startTimestamp)
+        .where(FirestoreConstants.fieldLedgerShrineName, isEqualTo: shrineName)
+        .where(FirestoreConstants.fieldStartTimestamp, isEqualTo: startTimestamp)
         .limit(1)
         .get();
 
@@ -448,7 +450,7 @@ class FirestoreHelpers {
     }
 
     await snapshot.docs.first.reference.update({
-      'seconds_tracked': secondsTracked,
+      FirestoreConstants.fieldSecondsTracked: secondsTracked,
     });
     await _stampUserDoc(userId);
   }

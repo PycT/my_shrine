@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:my_shrine/data/app_colors.dart';
+import 'package:my_shrine/utils/color_utils.dart';
 
 /// A map of 32 curated colour names → RRGGBB hex strings.
 /// Every colour is a mid-tone that reads well on both light and dark
@@ -30,11 +31,13 @@ class ColorPickerWidget extends StatefulWidget {
 }
 
 class _ColorPickerWidgetState extends State<ColorPickerWidget> {
+  late final List<MapEntry<String, String>> _entries;
   late String colorPicked;
 
   @override
   void initState() {
     super.initState();
+    _entries = _palette.entries.toList();
     colorPicked = widget.initialColor ?? _palette.values.first;
   }
 
@@ -48,7 +51,7 @@ class _ColorPickerWidgetState extends State<ColorPickerWidget> {
     return colorPicked; // fallback: show the raw hex
   }
 
-  Color _hexToColor(String hex) => Color(int.parse('FF$hex', radix: 16));
+  Color _hexToColor(String hex) => hexToColor(hex);
 
   void _select(String hex) {
     setState(() => colorPicked = hex);
@@ -95,8 +98,8 @@ class _ColorPickerWidgetState extends State<ColorPickerWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: _palette.length,
             itemBuilder: (context, index) {
-              final name = _palette.keys.elementAt(index);
-              final hex = _palette.values.elementAt(index);
+              final name = _entries[index].key;
+              final hex = _entries[index].value;
               final color = _hexToColor(hex);
               final isSelected = hex.toUpperCase() == colorPicked.toUpperCase();
 

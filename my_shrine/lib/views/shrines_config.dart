@@ -2,19 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:my_shrine/data/default_shrines.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/view_data_helpers.dart';
+import 'package:my_shrine/widgets/authentication/auth_gate.dart';
 import 'package:my_shrine/widgets/common_nav_bar.dart';
 import 'package:my_shrine/widgets/shrine_creator_widget.dart';
 import 'package:my_shrine/widgets/shrine_editor_widget.dart';
 import 'package:my_shrine/data/app_styles.dart';
 
-class ShrinesConfigPage extends StatefulWidget {
+class ShrinesConfigPage extends StatelessWidget {
   const ShrinesConfigPage({super.key});
 
   @override
-  State<ShrinesConfigPage> createState() => _ShrinesConfigPageState();
+  Widget build(BuildContext context) {
+    return AuthGate(page: ShrinesConfig());
+  }
 }
 
-class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
+class ShrinesConfig extends StatefulWidget {
+  const ShrinesConfig({super.key});
+
+  @override
+  State<ShrinesConfig> createState() => _ShrinesConfigState();
+}
+
+class _ShrinesConfigState extends State<ShrinesConfig> {
   late final ValueNotifier<List<Shrine>> _shrineEditors;
   final Set<String> _newShrineNames = {};
 
@@ -28,7 +38,19 @@ class _ShrinesConfigPageState extends State<ShrinesConfigPage> {
   }
 
   Future<void> _loadShrines() async {
-    final shrines = await ViewDataHelpers.trackerViewPreload(context);
+    final shrines = await ViewDataHelpers.trackerViewPreload(
+      onError: (msg) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
+    );
     _shrineEditors.value = List<Shrine>.from(shrines);
   }
 

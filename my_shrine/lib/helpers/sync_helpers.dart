@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:my_shrine/data/firestore_constants.dart';
 import 'package:my_shrine/data/sqlite_constants.dart';
-import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/helpers/firestore_helpers.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
+import 'package:my_shrine/utils/user_helpers.dart';
 
 /// Provides full-refresh synchronisation between the local SQLite database and
 /// the remote Firestore database.
@@ -26,23 +27,26 @@ class SyncHelpers {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  /// Returns the current user's email, used as the Firestore document ID.
-  ///
-  /// Throws a [StateError] if no user is signed in or the user has no email.
-  static String _requireUserId() {
-    final user = StateNotifiers.user.value;
-    if (user == null || user.email == null) {
-      throw StateError('No signed-in user or user has no email');
-    }
-    return user.email!;
-  }
-
-  /// Deletes every document in a Firestore collection.
+  /// Deletes every document in a Firestore collection using batched writes.
   static Future<void> _clearCollection(CollectionReference ref) async {
     final snapshot = await ref.get();
+    if (snapshot.docs.isEmpty) return;
+
+    // Firestore supports up to 500 operations per batch.
+    const batchLimit = 500;
+    var batch = FirebaseFirestore.instance.batch();
+    var count = 0;
+
     for (final doc in snapshot.docs) {
-      await doc.reference.delete();
+      batch.delete(doc.reference);
+      count++;
+      if (count >= batchLimit) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        count = 0;
+      }
     }
+    if (count > 0) await batch.commit();
   }
 
   // ---------------------------------------------------------------------------
@@ -61,33 +65,58 @@ class SyncHelpers {
   /// Technical records (`technical_records` in SQLite, user-doc fields in
   /// Firestore) are **not** touched.
   static Future<void> localToRemote() async {
-    final userId = _requireUserId();
+    final userId = requireUserId();
 
     // 1. Clear remote sub-collections.
     await _clearCollection(FirestoreHelpers.shrinesRef(userId));
     await _clearCollection(FirestoreHelpers.ledgerRef(userId));
 
-    // 2. Push local shrines → remote.
+    // 2. Push local shrines → remote (batched).
     final localShrines = await SqliteHelpers.getUserShrines();
+    var batch = FirebaseFirestore.instance.batch();
+    var count = 0;
+    const batchLimit = 500;
+
     for (final row in localShrines) {
-      await FirestoreHelpers.shrinesRef(userId).add({
-        'name': row[SqliteConstants.colShrineName],
-        'shrine_color': row[SqliteConstants.colShrineColor],
-        'is_deleted': (row[SqliteConstants.colIsDeleted] as int) == 1,
+      batch.set(FirestoreHelpers.shrinesRef(userId).doc(), {
+        FirestoreConstants.fieldShrineName: row[SqliteConstants.colShrineName],
+        FirestoreConstants.fieldShrineColor: row[SqliteConstants.colShrineColor],
+        FirestoreConstants.fieldIsDeleted:
+            (row[SqliteConstants.colIsDeleted] as int) == 1,
       });
+      count++;
+      if (count >= batchLimit) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) {
+      await batch.commit();
+      batch = FirebaseFirestore.instance.batch();
+      count = 0;
     }
 
-    // 3. Push local ledger → remote.
+    // 3. Push local ledger → remote (batched).
     final localLedger = await SqliteHelpers.getLedgerRecords();
     for (final row in localLedger) {
       final isoString = row[SqliteConstants.colStartTimestamp] as String;
-      await FirestoreHelpers.ledgerRef(userId).add({
-        'shrine_name': row[SqliteConstants.colShrineName],
-        'seconds_tracked': row[SqliteConstants.colSecondsTracked],
-        'start_timestamp': Timestamp.fromDate(DateTime.parse(isoString)),
-        'is_deleted': (row[SqliteConstants.colIsDeleted] as int) == 1,
+      batch.set(FirestoreHelpers.ledgerRef(userId).doc(), {
+        FirestoreConstants.fieldLedgerShrineName: row[SqliteConstants.colShrineName],
+        FirestoreConstants.fieldSecondsTracked: row[SqliteConstants.colSecondsTracked],
+        FirestoreConstants.fieldStartTimestamp:
+            Timestamp.fromDate(DateTime.parse(isoString)),
+        FirestoreConstants.fieldIsDeleted:
+            (row[SqliteConstants.colIsDeleted] as int) == 1,
       });
+      count++;
+      if (count >= batchLimit) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        count = 0;
+      }
     }
+    if (count > 0) await batch.commit();
   }
 
   // ---------------------------------------------------------------------------
@@ -105,7 +134,7 @@ class SyncHelpers {
   ///
   /// Technical records are **not** touched.
   static Future<void> remoteToLocal() async {
-    final userId = _requireUserId();
+    final userId = requireUserId();
 
     // 1. Clear local tables.
     await SqliteHelpers.clearShrines();
@@ -115,21 +144,26 @@ class SyncHelpers {
     final remoteShrines = await FirestoreHelpers.getUserShrines(userId: userId);
     for (final doc in remoteShrines) {
       await SqliteHelpers.insertShrineRaw(
-        shrineName: doc['name'] as String,
-        shrineColor: doc['shrine_color'] as String,
-        isDeleted: (doc['is_deleted'] as bool? ?? false) ? 1 : 0,
+        shrineName: doc[FirestoreConstants.fieldShrineName] as String,
+        shrineColor: doc[FirestoreConstants.fieldShrineColor] as String,
+        isDeleted:
+            (doc[FirestoreConstants.fieldIsDeleted] as bool? ?? false) ? 1 : 0,
       );
     }
 
     // 3. Pull remote ledger → local.
-    final remoteLedger = await FirestoreHelpers.getLedgerRecords(userId: userId);
+    final remoteLedger =
+        await FirestoreHelpers.getLedgerRecords(userId: userId);
     for (final doc in remoteLedger) {
-      final timestamp = doc['start_timestamp'] as Timestamp;
+      final timestamp =
+          doc[FirestoreConstants.fieldStartTimestamp] as Timestamp;
       await SqliteHelpers.insertLedgerRaw(
-        shrineName: doc['shrine_name'] as String,
-        secondsTracked: (doc['seconds_tracked'] as num).toInt(),
+        shrineName: doc[FirestoreConstants.fieldLedgerShrineName] as String,
+        secondsTracked:
+            (doc[FirestoreConstants.fieldSecondsTracked] as num).toInt(),
         startTimestamp: timestamp.toDate(),
-        isDeleted: (doc['is_deleted'] as bool? ?? false) ? 1 : 0,
+        isDeleted:
+            (doc[FirestoreConstants.fieldIsDeleted] as bool? ?? false) ? 1 : 0,
       );
     }
   }

@@ -3,6 +3,7 @@ import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
 
 class ShrineSwitchWidget extends StatelessWidget {
   final Shrine shrine;
@@ -27,16 +28,12 @@ class ShrineSwitchWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color shrineColor = Color(int.parse('FF${shrine.color}', radix: 16));
+    Color shrineColor = hexToColor(shrine.color);
     return ElevatedButton(
       onPressed: _onTap,
       style: ElevatedButton.styleFrom(
         backgroundColor: shrineColor,
-        foregroundColor:
-            ThemeData.estimateBrightnessForColor(shrineColor) ==
-                Brightness.light
-            ? Colors.black
-            : Colors.white,
+        foregroundColor: foregroundFor(shrineColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       ),

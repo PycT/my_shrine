@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:my_shrine/data/app_colors.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
 import 'package:my_shrine/widgets/color_picker_widget.dart';
 
 /// A widget that displays a grey "add" button.
@@ -54,13 +55,6 @@ class _ShrineCreatorWidgetState extends State<ShrineCreatorWidget> {
     final values = appColors.values.toList();
     return values[Random().nextInt(values.length)];
   }
-
-  Color _hexToColor(String hex) => Color(int.parse('FF$hex', radix: 16));
-
-  Color _foregroundFor(Color bg) =>
-      ThemeData.estimateBrightnessForColor(bg) == Brightness.light
-      ? Colors.black
-      : Colors.white;
 
   void _enterCreateMode() => setState(() {
     _nameController.clear();
@@ -146,8 +140,8 @@ class _ShrineCreatorWidgetState extends State<ShrineCreatorWidget> {
   @override
   Widget build(BuildContext context) {
     if (_creating) {
-      final bgColor = _hexToColor(_currentColor);
-      final fgColor = _foregroundFor(bgColor);
+      final bgColor = hexToColor(_currentColor);
+      final fgColor = foregroundFor(bgColor);
       return _buildCreateMode(bgColor, fgColor);
     }
     return _buildDisplayMode();

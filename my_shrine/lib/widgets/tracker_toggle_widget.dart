@@ -4,6 +4,8 @@ import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/utils/color_utils.dart';
+import 'package:my_shrine/utils/time_format_utils.dart';
 
 class TrackerToggleWidget extends StatefulWidget {
   const TrackerToggleWidget({super.key});
@@ -41,14 +43,8 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
     setState(() => _running = !_running);
   }
 
-  static String _format(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    return '${h.toString().padLeft(2, '0')}:'
-        '${m.toString().padLeft(2, '0')}:'
-        '${s.toString().padLeft(2, '0')}';
-  }
+  // Delegates to shared utility.
+  static String _format(int seconds) => formatDuration(seconds);
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +57,7 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
             onPressed: _toggle,
             style: ElevatedButton.styleFrom(
               backgroundColor: _running
-                  ? Color(int.parse('FF${shrine.color}', radix: 16))
+                  ? hexToColor(shrine.color)
                   : Colors.grey[300],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
