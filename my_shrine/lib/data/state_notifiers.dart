@@ -15,4 +15,9 @@ class StateNotifiers {
   static ValueNotifier<Shrine> currentShrine = ValueNotifier(defaultShrine);
 
   static ValueNotifier<DateTime> startTimestamp = ValueNotifier(DateTime.now());
+
+  /// Set to `true` by [ViewDataHelpers.trackerViewPreload] when a remote
+  /// tracking session is detected and restored. [TrackerToggleWidget] checks
+  /// this in `initState` to start the periodic timer without resetting state.
+  static ValueNotifier<bool> isTrackingRestored = ValueNotifier(false);
 }

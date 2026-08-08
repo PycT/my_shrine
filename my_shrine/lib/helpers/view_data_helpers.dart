@@ -10,6 +10,7 @@ import 'package:my_shrine/entities/time_ledger.dart';
 import 'package:my_shrine/helpers/firestore_helpers.dart';
 import 'package:my_shrine/helpers/sqlite_helpers.dart';
 import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/utils/user_helpers.dart';
 
 /// Provides static methods that populate the data structures used by the main
@@ -114,6 +115,9 @@ class ViewDataHelpers {
       await SyncHelpers.remoteToLocal();
       await SqliteHelpers.updateTechnicalRecord(lastSync: DateTime.now());
 
+      // Restore remote tracking state if a session was in progress.
+      await _restoreTrackingState(remoteUser);
+
       final remoteShrines = await FirestoreHelpers.getUserShrines(
         userId: userId,
       );
@@ -169,6 +173,8 @@ class ViewDataHelpers {
         remoteUpdateTime != null &&
         (lastSync.isAfter(remoteUpdateTime) ||
             lastSync.isAtSameMomentAs(remoteUpdateTime))) {
+      // Restore remote tracking state even when shrine data is up-to-date.
+      await _restoreTrackingState(remoteUser);
       return localShrines;
     }
 
@@ -176,9 +182,87 @@ class ViewDataHelpers {
     await SyncHelpers.remoteToLocal();
     await SqliteHelpers.updateTechnicalRecord(lastSync: DateTime.now());
 
+    // Restore remote tracking state if a session was in progress.
+    await _restoreTrackingState(remoteUser);
+
     // Re-read shrines from local DB after sync.
     final updatedRows = await SqliteHelpers.getUserShrines();
     return _sqliteRowsToShrines(updatedRows);
+  }
+
+  // ---------------------------------------------------------------------------
+  // _restoreTrackingState
+  // ---------------------------------------------------------------------------
+
+  /// Reads the remote tracking fields from [userData] and restores the local
+  /// timer state if the user was mid-session.
+  ///
+  /// If elapsed time ≥ 8 h, the session is capped and auto-stopped:
+  ///   - A ledger record is saved locally and synced to remote.
+  ///   - The remote `is_tracking` flag is set to `false`.
+  ///
+  /// Otherwise, populates [StateNotifiers] so that [TrackerToggleWidget] can
+  /// resume the periodic timer via [StateNotifiers.isTrackingRestored].
+  static Future<void> _restoreTrackingState(
+    Map<String, dynamic>? userData,
+  ) async {
+    if (userData == null) return;
+
+    final isTracking =
+        userData[FirestoreConstants.fieldIsTracking] as bool? ?? false;
+    if (!isTracking) return;
+
+    final rawTimestamp =
+        userData[FirestoreConstants.fieldTrackingStartTimestamp];
+    if (rawTimestamp == null) return;
+
+    final remoteStart = (rawTimestamp as Timestamp).toDate();
+    final shrineName =
+        userData[FirestoreConstants.fieldTrackingShrineName] as String?;
+
+    var elapsed = DateTime.now().difference(remoteStart).inSeconds;
+    if (elapsed < 0) elapsed = 0; // guard against clock skew
+
+    if (elapsed >= 3600 * 8) {
+      // Cap at 8 hours, save the record, and clear remote tracking flag.
+      elapsed = 3600 * 8;
+      StateNotifiers.secondsCounted.value = elapsed;
+      StateNotifiers.startTimestamp.value = remoteStart;
+
+      // Persist the capped session locally.
+      final effectiveShrineName =
+          shrineName ?? StateNotifiers.currentShrine.value.name;
+      await SqliteHelpers.addLedgerRecord(
+        shrineName: effectiveShrineName,
+        secondsTracked: elapsed,
+        startTimestamp: remoteStart,
+      );
+      await SyncHelpers.localToRemote();
+
+      // Clear remote tracking flag (fire-and-forget).
+      final userId = requireUserId();
+      FirestoreHelpers.updateUser(
+        userId: userId,
+        data: {FirestoreConstants.fieldIsTracking: false},
+      );
+    } else {
+      // Session is still active — restore state for TrackerToggleWidget.
+      StateNotifiers.secondsCounted.value = elapsed;
+      StateNotifiers.startTimestamp.value = remoteStart;
+
+      // Update currentShrine to match the remotely tracked shrine.
+      if (shrineName != null) {
+        final localShrineRows = await SqliteHelpers.getUserShrines();
+        final shrines = _sqliteRowsToShrines(localShrineRows);
+        final match = shrines.where((s) => s.name == shrineName);
+        if (match.isNotEmpty) {
+          StateNotifiers.currentShrine.value = match.first;
+        }
+      }
+
+      // Signal to TrackerToggleWidget that it should start its Timer.
+      StateNotifiers.isTrackingRestored.value = true;
+    }
   }
 
   // ---------------------------------------------------------------------------

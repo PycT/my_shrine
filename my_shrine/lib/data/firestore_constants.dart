@@ -19,6 +19,11 @@ class FirestoreConstants {
   static const String fieldSecondsTracked = 'seconds_tracked';
   static const String fieldStartTimestamp = 'start_timestamp';
 
+  // Tracking state fields (on the user document)
+  static const String fieldIsTracking = 'is_tracking';
+  static const String fieldTrackingStartTimestamp = 'tracking_start_timestamp';
+  static const String fieldTrackingShrineName = 'tracking_shrine_name';
+
   // Shared fields
   static const String fieldIsDeleted = 'is_deleted';
 }

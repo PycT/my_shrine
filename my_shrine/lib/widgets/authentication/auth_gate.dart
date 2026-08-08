@@ -16,14 +16,12 @@ class AuthGate extends StatelessWidget {
         if (!snapshot.hasData) {
           return SignInPage();
         } else {
-          // Only update the notifier when the value actually changes to avoid
-          // triggering unnecessary rebuilds.
+          // Set the user synchronously so that helpers calling
+          // requireUserId() have the value available immediately —
+          // before the child page kicks off its preload futures.
           final user = snapshot.data!;
           if (StateNotifiers.user.value?.uid != user.uid) {
-            // Schedule the state mutation for after the current build frame.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              StateNotifiers.user.value = user;
-            });
+            StateNotifiers.user.value = user;
           }
           return page;
         }

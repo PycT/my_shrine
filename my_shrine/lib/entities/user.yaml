@@ -17,3 +17,13 @@ fields:
   last_device_id:
     type: String
     description: The ID of the last device that performed a write to this user's data.
+  is_tracking:
+    type: bool
+    default: false
+    description: Whether the user is currently tracking time.
+  tracking_start_timestamp:
+    type: Timestamp
+    description: The timestamp when the current tracking session began. Null when not tracking.
+  tracking_shrine_name:
+    type: String
+    description: The name of the shrine being tracked. Null when not tracking.
