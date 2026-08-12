@@ -10,6 +10,7 @@ import 'package:my_shrine/helpers/sync_helpers.dart';
 import 'package:my_shrine/utils/color_utils.dart';
 import 'package:my_shrine/utils/time_format_utils.dart';
 import 'package:my_shrine/utils/user_helpers.dart';
+import 'package:my_shrine/widgets/timestamp_picker_widget.dart';
 
 class TrackerToggleWidget extends StatefulWidget {
   const TrackerToggleWidget({super.key});
@@ -20,7 +21,12 @@ class TrackerToggleWidget extends StatefulWidget {
 
 class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
   bool _running = false;
+  bool _showingPicker = false;
   Timer? _timer;
+
+  /// Remembers whether the toggle was in running state when picker opened,
+  /// so we know whether to start or stop on confirmation.
+  bool _wasRunningOnPickerOpen = false;
 
   @override
   void initState() {
@@ -66,19 +72,52 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
     if (mounted) setState(() {});
   }
 
-  void _toggle() {
-    if (_running) {
-      _stopTracking();
+  // ---------------------------------------------------------------------------
+  // Picker flow
+  // ---------------------------------------------------------------------------
+
+  void _openPicker() {
+    _wasRunningOnPickerOpen = _running;
+    setState(() => _showingPicker = true);
+  }
+
+  void _onTimestampConfirmed(DateTime selected) {
+    if (!mounted) return;
+    setState(() => _showingPicker = false);
+
+    if (_wasRunningOnPickerOpen) {
+      _stopTracking(selected);
     } else {
-      _startTracking();
+      _startTracking(selected);
     }
   }
 
-  void _startTracking() {
+  void _onTimestampDismissed() {
+    if (!mounted) return;
+    setState(() => _showingPicker = false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Start / stop tracking
+  // ---------------------------------------------------------------------------
+
+  void _startTracking(DateTime selectedTimestamp) {
     StateNotifiers.secondsCounted.value = 0;
-    StateNotifiers.startTimestamp.value = DateTime.now();
+    StateNotifiers.startTimestamp.value = selectedTimestamp;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      StateNotifiers.secondsCounted.value++;
+      final elapsed = DateTime.now()
+          .difference(StateNotifiers.startTimestamp.value)
+          .inSeconds;
+      if (elapsed < 0) {
+        StateNotifiers.secondsCounted.value = 0; // future start — show 0
+        return;
+      }
+      if (elapsed >= 3600 * 8) {
+        StateNotifiers.secondsCounted.value = 3600 * 8;
+        _stopTracking();
+        return;
+      }
+      StateNotifiers.secondsCounted.value = elapsed;
     });
 
     // Write remote tracking state (fire-and-forget).
@@ -88,7 +127,7 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
       data: {
         FirestoreConstants.fieldIsTracking: true,
         FirestoreConstants.fieldTrackingStartTimestamp:
-            Timestamp.fromDate(StateNotifiers.startTimestamp.value),
+            Timestamp.fromDate(selectedTimestamp),
         FirestoreConstants.fieldTrackingShrineName:
             StateNotifiers.currentShrine.value.name,
       },
@@ -97,14 +136,25 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
     setState(() => _running = true);
   }
 
-  void _stopTracking() {
+  void _stopTracking([DateTime? stopTimestamp]) {
     _timer?.cancel();
     _timer = null;
+
+    final effectiveStop = stopTimestamp ?? DateTime.now();
+
+    // Compute actual seconds tracked from start to selected stop time.
+    var secondsTracked = effectiveStop
+        .difference(StateNotifiers.startTimestamp.value)
+        .inSeconds;
+    if (secondsTracked < 0) secondsTracked = 0;
+    if (secondsTracked > 3600 * 8) secondsTracked = 3600 * 8;
+
+    StateNotifiers.secondsCounted.value = secondsTracked;
 
     // Persist the tracked session locally, then sync to remote.
     SqliteHelpers.addLedgerRecord(
       shrineName: StateNotifiers.currentShrine.value.name,
-      secondsTracked: StateNotifiers.secondsCounted.value,
+      secondsTracked: secondsTracked,
       startTimestamp: StateNotifiers.startTimestamp.value,
     ).then((_) => SyncHelpers.localToRemote());
 
@@ -121,15 +171,40 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
   // Delegates to shared utility.
   static String _format(int seconds) => formatDuration(seconds);
 
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<Shrine>(
       valueListenable: StateNotifiers.currentShrine,
       builder: (context, shrine, _) {
+        final width = MediaQuery.of(context).size.width * 0.8;
+
+        // ── Picker mode: replaces the button ─────────────────────────────
+        if (_showingPicker) {
+          return SizedBox(
+            width: width,
+            child: TimestampPickerWidget(
+              initialValue: DateTime.now(),
+              title: _wasRunningOnPickerOpen
+                  ? 'Stopping at'
+                  : 'Starting at',
+              confirmLabel: _wasRunningOnPickerOpen
+                  ? 'Stop tracking'
+                  : 'Start tracking',
+              onConfirmed: _onTimestampConfirmed,
+              onDismissed: _onTimestampDismissed,
+            ),
+          );
+        }
+
+        // ── Normal toggle button ─────────────────────────────────────────
         return SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
+          width: width,
           child: ElevatedButton(
-            onPressed: _toggle,
+            onPressed: _openPicker,
             style: ElevatedButton.styleFrom(
               backgroundColor: _running
                   ? hexToColor(shrine.color)
