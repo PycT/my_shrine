@@ -40,6 +40,7 @@ import 'package:my_shrine/entities/date_granularity.dart';
 /// - [addLedgerRecord]      — inserts a time-tracking row.
 /// - [hasLedgerRecord]      — checks if a record exists for shrine + timestamp.
 /// - [updateLedgerSeconds]  — updates seconds on a matching ledger row.
+/// - [softDeleteLedgerRecord] — soft-deletes a ledger row by ID.
 ///
 /// *Technical records:*
 /// - [getTechnicalRecord]   — reads the single technical-records row.
@@ -381,6 +382,31 @@ class SqliteHelpers {
         'No ledger record found for shrine "$shrineName" at $startTimestamp',
       );
     }
+    await _stampLastUpdate();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7b. Soft-delete a ledger record
+  // ---------------------------------------------------------------------------
+
+  /// Sets `is_deleted = 1` on the ledger row identified by [id].
+  ///
+  /// Throws a [StateError] if no matching row is found.
+  static Future<void> softDeleteLedgerRecord({required int id}) async {
+    final db = await _database;
+
+    final count = await db.update(
+      SqliteConstants.ledgerTable,
+      {SqliteConstants.colIsDeleted: 1},
+      where:
+          '${SqliteConstants.colId} = ? AND ${SqliteConstants.colIsDeleted} = 0',
+      whereArgs: [id],
+    );
+
+    if (count == 0) {
+      throw StateError('No ledger record found with id "$id"');
+    }
+
     await _stampLastUpdate();
   }
 

@@ -55,6 +55,7 @@ import 'package:my_shrine/utils/user_helpers.dart';
 /// - [addLedgerRecord]     — adds a new time-tracking entry (auto-ID).
 /// - [hasLedgerRecord]     — checks if a record exists for shrine + timestamp.
 /// - [updateLedgerSeconds] — updates seconds on a matching ledger record.
+/// - [softDeleteLedgerRecord] — soft-deletes a ledger record by composite key.
 class FirestoreHelpers {
   // Private constructor — this class should not be instantiated.
   FirestoreHelpers._();
@@ -451,6 +452,38 @@ class FirestoreHelpers {
 
     await snapshot.docs.first.reference.update({
       FirestoreConstants.fieldSecondsTracked: secondsTracked,
+    });
+    await _stampUserDoc(userId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7b. Soft-delete a ledger record
+  // ---------------------------------------------------------------------------
+
+  /// Sets `is_deleted` to `true` on the first ledger document whose
+  /// `shrine_name` equals [shrineName] and `start_timestamp` equals
+  /// [startTimestamp].
+  ///
+  /// Throws a [StateError] if no matching document is found.
+  static Future<void> softDeleteLedgerRecord({
+    required String userId,
+    required String shrineName,
+    required Timestamp startTimestamp,
+  }) async {
+    final snapshot = await ledgerRef(userId)
+        .where(FirestoreConstants.fieldLedgerShrineName, isEqualTo: shrineName)
+        .where(FirestoreConstants.fieldStartTimestamp, isEqualTo: startTimestamp)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      throw StateError(
+        'No ledger record found for shrine "$shrineName" at $startTimestamp',
+      );
+    }
+
+    await snapshot.docs.first.reference.update({
+      FirestoreConstants.fieldIsDeleted: true,
     });
     await _stampUserDoc(userId);
   }
