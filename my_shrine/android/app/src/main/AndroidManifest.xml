@@ -1,10 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.yellowcup.my_shrine">
     <application
         android:label="my_shrine"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
-            android:name=".MainActivity"
+            android:name="com.yellowcup.my_shrine.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

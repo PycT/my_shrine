@@ -42,11 +42,13 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   bool _isNew = false;
   late TextEditingController _nameController;
   late String _currentColor;
+  late String _currentName;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.shrine.name);
+    _currentName = widget.shrine.name;
+    _nameController = TextEditingController(text: _currentName);
     _currentColor = widget.shrine.color;
     _isNew = widget.isNew;
   }
@@ -64,7 +66,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
   });
 
   void _cancel() => setState(() {
-    _nameController.text = widget.shrine.name;
+    _nameController.text = _currentName;
     _currentColor = widget.shrine.color;
     _editing = false;
   });
@@ -133,6 +135,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
 
       widget.onEdited?.call(newName, newColor);
       setState(() {
+        _currentName = newName;
         _editing = false;
       });
     } finally {
@@ -204,7 +207,7 @@ class _ShrineEditorWidgetState extends State<ShrineEditorWidget> {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  widget.shrine.name,
+                  _currentName,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

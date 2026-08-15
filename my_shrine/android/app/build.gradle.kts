@@ -57,6 +57,12 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    sourceSets {
+        getByName("main") {
+            java.srcDirs("src/main/java", "src/main/kotlin")
+        }
+    }
 }
 
 flutter {
