@@ -1,13 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:my_shrine/data/firestore_constants.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
-import 'package:my_shrine/helpers/firestore_helpers.dart';
-import 'package:my_shrine/helpers/sqlite_helpers.dart';
-import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/helpers/tracking_helpers.dart';
 import 'package:my_shrine/utils/color_utils.dart';
-import 'package:my_shrine/utils/user_helpers.dart';
 
 class ShrineSwitchWidget extends StatelessWidget {
   final Shrine shrine;
@@ -16,29 +11,34 @@ class ShrineSwitchWidget extends StatelessWidget {
 
   void _onTap() {
     final previous = StateNotifiers.currentShrine.value;
-    if (previous.name != shrine.name) {
-      if (StateNotifiers.secondsCounted.value > 0) {
-        SqliteHelpers.addLedgerRecord(
-          shrineName: StateNotifiers.currentShrine.value.name,
-          secondsTracked: StateNotifiers.secondsCounted.value,
-          startTimestamp: StateNotifiers.startTimestamp.value,
-        ).then((_) => SyncHelpers.localToRemote());
-        StateNotifiers.secondsCounted.value = 0;
-        StateNotifiers.startTimestamp.value = DateTime.now();
+    if (previous.name == shrine.name) return;
 
-        // Update remote tracking state with the new shrine (fire-and-forget).
-        final userId = requireUserId();
-        FirestoreHelpers.updateUser(
-          userId: userId,
-          data: {
-            FirestoreConstants.fieldTrackingStartTimestamp:
-                Timestamp.fromDate(StateNotifiers.startTimestamp.value),
-            FirestoreConstants.fieldTrackingShrineName: shrine.name,
-          },
-        );
-      }
+    final wasTracking = StateNotifiers.isTracking.value;
+
+    if (wasTracking) {
+      // Stop the previous shrine's session using the shared helper.
+      // We pass a no-op cancelTimer because TrackerToggleWidget owns the
+      // actual Timer object; it will receive the isTracking change via its
+      // listener and cancel its own timer there. We must not cancel a timer
+      // we don't own, so TrackingHelpers.stopTracking only needs to persist
+      // the record and flip the flags.
+      TrackingHelpers.stopTracking(cancelTimer: () {});
     }
+
+    // Switch the active shrine, then start a fresh session if we were tracking.
     StateNotifiers.currentShrine.value = shrine;
+
+    if (wasTracking) {
+      // Start tracking the new shrine immediately from now, with a no-op
+      // timer creator — TrackerToggleWidget's _onIsTrackingChanged listener
+      // will flip _running and its own timer tick keeps counting. Here we
+      // only need TrackingHelpers to reset secondsCounted, set startTimestamp,
+      // flip isTracking back to true, and write the remote state.
+      TrackingHelpers.startTracking(
+        selectedTimestamp: DateTime.now(),
+        onTimerCreated: (timer) => timer.cancel(),
+      );
+    }
   }
 
   @override

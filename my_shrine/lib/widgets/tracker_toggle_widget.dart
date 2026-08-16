@@ -1,15 +1,10 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:my_shrine/data/firestore_constants.dart';
 import 'package:my_shrine/data/state_notifiers.dart';
 import 'package:my_shrine/entities/shrine.dart';
-import 'package:my_shrine/helpers/firestore_helpers.dart';
-import 'package:my_shrine/helpers/sqlite_helpers.dart';
-import 'package:my_shrine/helpers/sync_helpers.dart';
+import 'package:my_shrine/helpers/tracking_helpers.dart';
 import 'package:my_shrine/utils/color_utils.dart';
 import 'package:my_shrine/utils/time_format_utils.dart';
-import 'package:my_shrine/utils/user_helpers.dart';
 import 'package:my_shrine/widgets/timestamp_picker_widget.dart';
 
 class TrackerToggleWidget extends StatefulWidget {
@@ -35,6 +30,8 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
     // isTrackingRestored *after* this initState has already executed.
     // Listen for the flag so we catch it regardless of timing.
     StateNotifiers.isTrackingRestored.addListener(_onTrackingRestored);
+    // Mirror external isTracking changes (e.g. from ShrineSwitchWidget).
+    StateNotifiers.isTracking.addListener(_onIsTrackingChanged);
     // Also handle the case where the flag was already set before we
     // registered the listener (e.g. hot-reload or very fast preload).
     if (StateNotifiers.isTrackingRestored.value) {
@@ -45,8 +42,18 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
   @override
   void dispose() {
     StateNotifiers.isTrackingRestored.removeListener(_onTrackingRestored);
+    StateNotifiers.isTracking.removeListener(_onIsTrackingChanged);
     _timer?.cancel();
     super.dispose();
+  }
+
+  /// Keeps [_running] in sync when [StateNotifiers.isTracking] is changed
+  /// externally (e.g. by [ShrineSwitchWidget] starting a new session).
+  void _onIsTrackingChanged() {
+    final nowTracking = StateNotifiers.isTracking.value;
+    if (_running != nowTracking && mounted) {
+      setState(() => _running = nowTracking);
+    }
   }
 
   /// Called when [StateNotifiers.isTrackingRestored] becomes `true`.
@@ -58,6 +65,7 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
 
     _timer?.cancel();
     _running = true;
+    StateNotifiers.isTracking.value = true;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final elapsed = DateTime.now()
           .difference(StateNotifiers.startTimestamp.value)
@@ -102,71 +110,45 @@ class _TrackerToggleWidgetState extends State<TrackerToggleWidget> {
   // ---------------------------------------------------------------------------
 
   void _startTracking(DateTime selectedTimestamp) {
-    StateNotifiers.secondsCounted.value = 0;
-    StateNotifiers.startTimestamp.value = selectedTimestamp;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final elapsed = DateTime.now()
-          .difference(StateNotifiers.startTimestamp.value)
-          .inSeconds;
-      if (elapsed < 0) {
-        StateNotifiers.secondsCounted.value = 0; // future start — show 0
-        return;
-      }
-      if (elapsed >= 3600 * 8) {
-        StateNotifiers.secondsCounted.value = 3600 * 8;
-        _stopTracking();
-        return;
-      }
-      StateNotifiers.secondsCounted.value = elapsed;
-    });
-
-    // Write remote tracking state (fire-and-forget).
-    final userId = requireUserId();
-    FirestoreHelpers.updateUser(
-      userId: userId,
-      data: {
-        FirestoreConstants.fieldIsTracking: true,
-        FirestoreConstants.fieldTrackingStartTimestamp:
-            Timestamp.fromDate(selectedTimestamp),
-        FirestoreConstants.fieldTrackingShrineName:
-            StateNotifiers.currentShrine.value.name,
+    TrackingHelpers.startTracking(
+      selectedTimestamp: selectedTimestamp,
+      onTimerCreated: (timer) {
+        // Wrap the timer so the 8-hour auto-stop calls our local _stopTracking.
+        _timer?.cancel();
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+          final elapsed = DateTime.now()
+              .difference(StateNotifiers.startTimestamp.value)
+              .inSeconds;
+          if (elapsed < 0) {
+            StateNotifiers.secondsCounted.value = 0;
+            return;
+          }
+          if (elapsed >= 3600 * 8) {
+            StateNotifiers.secondsCounted.value = 3600 * 8;
+            _stopTracking();
+            return;
+          }
+          StateNotifiers.secondsCounted.value = elapsed;
+        });
+        // Cancel the timer created by TrackingHelpers (we run our own above
+        // so that the 8-hour ceiling still routes through _stopTracking here).
+        timer.cancel();
       },
     );
-
     setState(() => _running = true);
   }
 
   void _stopTracking([DateTime? stopTimestamp]) {
-    _timer?.cancel();
-    _timer = null;
-
-    final effectiveStop = stopTimestamp ?? DateTime.now();
-
-    // Compute actual seconds tracked from start to selected stop time.
-    var secondsTracked = effectiveStop
-        .difference(StateNotifiers.startTimestamp.value)
-        .inSeconds;
-    if (secondsTracked < 0) secondsTracked = 0;
-    if (secondsTracked > 3600 * 8) secondsTracked = 3600 * 8;
-
-    StateNotifiers.secondsCounted.value = secondsTracked;
-
-    // Persist the tracked session locally, then sync to remote.
-    SqliteHelpers.addLedgerRecord(
-      shrineName: StateNotifiers.currentShrine.value.name,
-      secondsTracked: secondsTracked,
-      startTimestamp: StateNotifiers.startTimestamp.value,
-    ).then((_) => SyncHelpers.localToRemote());
-
-    // Clear remote tracking flag (fire-and-forget).
-    final userId = requireUserId();
-    FirestoreHelpers.updateUser(
-      userId: userId,
-      data: {FirestoreConstants.fieldIsTracking: false},
+    TrackingHelpers.stopTracking(
+      cancelTimer: () {
+        _timer?.cancel();
+        _timer = null;
+      },
+      stopTimestamp: stopTimestamp,
     );
-
     setState(() => _running = false);
   }
+
 
   // Delegates to shared utility.
   static String _format(int seconds) => formatDuration(seconds);

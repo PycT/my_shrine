@@ -20,4 +20,8 @@ class StateNotifiers {
   /// tracking session is detected and restored. [TrackerToggleWidget] checks
   /// this in `initState` to start the periodic timer without resetting state.
   static ValueNotifier<bool> isTrackingRestored = ValueNotifier(false);
+
+  /// Whether a tracking session is currently active. Updated by
+  /// [TrackingHelpers.startTracking] and [TrackingHelpers.stopTracking].
+  static ValueNotifier<bool> isTracking = ValueNotifier(false);
 }

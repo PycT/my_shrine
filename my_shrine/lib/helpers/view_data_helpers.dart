@@ -50,6 +50,56 @@ class ViewDataHelpers {
   // trackerViewPreload
   // ---------------------------------------------------------------------------
 
+  /// Sorts [shrines] by the number of non-deleted ledger records that fall in
+  /// the one-month window ending at [referenceTime] (the timestamp of the
+  /// latest record in the DB), descending.  Shrines with equal counts keep
+  /// their relative order (stable sort).  Shrines absent from the ledger are
+  /// placed last.
+  ///
+  /// [ledgerRows] must be the full, unfiltered result of
+  /// [SqliteHelpers.getLedgerRecords].
+  static List<Shrine> _sortShrinesByFrequency(
+    List<Shrine> shrines,
+    List<Map<String, dynamic>> ledgerRows,
+  ) {
+    // Find the latest start_timestamp across non-deleted records.
+    DateTime? latest;
+    for (final row in ledgerRows) {
+      if ((row[SqliteConstants.colIsDeleted] as int?) == 1) continue;
+      final raw = row[SqliteConstants.colStartTimestamp];
+      if (raw == null) continue;
+      final ts = DateTime.parse(raw as String);
+      if (latest == null || ts.isAfter(latest)) latest = ts;
+    }
+
+    // Nothing to sort by — return as-is.
+    if (latest == null) return shrines;
+
+    final windowStart = latest.subtract(const Duration(days: 30));
+
+    // Count records per shrine name within the window.
+    final counts = <String, int>{};
+    for (final row in ledgerRows) {
+      if ((row[SqliteConstants.colIsDeleted] as int?) == 1) continue;
+      final raw = row[SqliteConstants.colStartTimestamp];
+      if (raw == null) continue;
+      final ts = DateTime.parse(raw as String);
+      if (ts.isBefore(windowStart)) continue;
+      final name = row[SqliteConstants.colShrineName] as String?;
+      if (name == null) continue;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+
+    // Stable sort: higher count first; 0 for shrines not in the window.
+    final sorted = List<Shrine>.from(shrines);
+    sorted.sort((a, b) {
+      final ca = counts[a.name] ?? 0;
+      final cb = counts[b.name] ?? 0;
+      return cb.compareTo(ca); // descending
+    });
+    return sorted;
+  }
+
   /// Preloads the list of [Shrine]s to be displayed in the TrackerView.
   ///
   /// Orchestrates local/remote database initialisation and synchronisation
@@ -72,6 +122,9 @@ class ViewDataHelpers {
   ///       - `last_sync >= last_update` → return local shrines.
   ///       - Otherwise → remote→local sync, stamp `last_sync`, return updated
   ///         shrines.
+  ///
+  /// The returned list is sorted by the frequency of tracking records in the
+  /// one-month window ending at the latest record timestamp (descending).
   static Future<List<Shrine>> trackerViewPreload({
     void Function(String message)? onError,
   }) async {
@@ -121,7 +174,9 @@ class ViewDataHelpers {
       final remoteShrines = await FirestoreHelpers.getUserShrines(
         userId: userId,
       );
-      return _firestoreDocsToShrines(remoteShrines);
+      final shrines = _firestoreDocsToShrines(remoteShrines);
+      final ledgerRows = await SqliteHelpers.getLedgerRecords();
+      return _sortShrinesByFrequency(shrines, ledgerRows);
     }
 
     // -------------------------------------------------------------------
@@ -147,7 +202,8 @@ class ViewDataHelpers {
     } catch (e) {
       // 1b.1a – Error accessing remote DB.
       onError?.call(e.toString());
-      return localShrines;
+      final ledgerRows = await SqliteHelpers.getLedgerRecords();
+      return _sortShrinesByFrequency(localShrines, ledgerRows);
     }
 
     if (remoteUser == null) {
@@ -155,7 +211,8 @@ class ViewDataHelpers {
       await FirestoreHelpers.init(); // creates user doc + seeds + is_initialized = true
       await SyncHelpers.localToRemote();
       await SqliteHelpers.updateTechnicalRecord(lastSync: DateTime.now());
-      return localShrines;
+      final ledgerRows = await SqliteHelpers.getLedgerRecords();
+      return _sortShrinesByFrequency(localShrines, ledgerRows);
     }
 
     // 1b.1c – Remote user collection found.
@@ -175,7 +232,8 @@ class ViewDataHelpers {
             lastSync.isAtSameMomentAs(remoteUpdateTime))) {
       // Restore remote tracking state even when shrine data is up-to-date.
       await _restoreTrackingState(remoteUser);
-      return localShrines;
+      final ledgerRows = await SqliteHelpers.getLedgerRecords();
+      return _sortShrinesByFrequency(localShrines, ledgerRows);
     }
 
     // Remote has newer data — pull it down.
@@ -187,7 +245,8 @@ class ViewDataHelpers {
 
     // Re-read shrines from local DB after sync.
     final updatedRows = await SqliteHelpers.getUserShrines();
-    return _sqliteRowsToShrines(updatedRows);
+    final ledgerRows = await SqliteHelpers.getLedgerRecords();
+    return _sortShrinesByFrequency(_sqliteRowsToShrines(updatedRows), ledgerRows);
   }
 
   // ---------------------------------------------------------------------------
