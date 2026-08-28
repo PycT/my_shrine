@@ -53,8 +53,10 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
   // ── Time (rollers) ───────────────────────────────────────────────────
   late int _hour;
   late int _minute;
+  late int _second;
   late FixedExtentScrollController _hourCtrl;
   late FixedExtentScrollController _minuteCtrl;
+  late FixedExtentScrollController _secondCtrl;
 
   // ── Calendar visibility ──────────────────────────────────────────
   bool _calendarExpanded = false;
@@ -72,9 +74,11 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
     _displayedMonth = DateTime(dt.year, dt.month);
     _hour = dt.hour;
     _minute = dt.minute;
+    _second = dt.second;
 
     _hourCtrl = FixedExtentScrollController(initialItem: _hour);
     _minuteCtrl = FixedExtentScrollController(initialItem: _minute);
+    _secondCtrl = FixedExtentScrollController(initialItem: _second);
 
     _startCountdown();
   }
@@ -84,6 +88,7 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
     _countdownTimer?.cancel();
     _hourCtrl.dispose();
     _minuteCtrl.dispose();
+    _secondCtrl.dispose();
     super.dispose();
   }
 
@@ -122,6 +127,7 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
       _selectedDate.day,
       _hour,
       _minute,
+      _second,
     );
     widget.onConfirmed(selected);
   }
@@ -179,6 +185,7 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
       _displayedMonth = DateTime(now.year, now.month);
       _hour = now.hour;
       _minute = now.minute;
+      _second = now.second;
       _calendarExpanded = false;
     });
     _hourCtrl.animateToItem(
@@ -188,6 +195,11 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
     );
     _minuteCtrl.animateToItem(
       _minute,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    _secondCtrl.animateToItem(
+      _second,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -205,6 +217,11 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
   void _onMinuteChanged(int index) {
     _onUserInteraction();
     setState(() => _minute = index);
+  }
+
+  void _onSecondChanged(int index) {
+    _onUserInteraction();
+    setState(() => _second = index);
   }
 
   // ---------------------------------------------------------------------------
@@ -436,6 +453,8 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
                 child: Center(child: Text('Hour', style: timeHeaderStyle))),
             Expanded(
                 child: Center(child: Text('Min', style: timeHeaderStyle))),
+            Expanded(
+                child: Center(child: Text('Sec', style: timeHeaderStyle))),
           ],
         ),
 
@@ -476,6 +495,15 @@ class _TimestampPickerWidgetState extends State<TimestampPickerWidget> {
                       itemCount: 60,
                       controller: _minuteCtrl,
                       onChanged: _onMinuteChanged,
+                      labelBuilder: (i) => '$i'.padLeft(2, '0'),
+                    ),
+                  ),
+                  // Second
+                  Expanded(
+                    child: _buildWheel(
+                      itemCount: 60,
+                      controller: _secondCtrl,
+                      onChanged: _onSecondChanged,
                       labelBuilder: (i) => '$i'.padLeft(2, '0'),
                     ),
                   ),

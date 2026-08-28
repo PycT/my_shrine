@@ -317,7 +317,10 @@ class _StatsViewState extends State<StatsView> {
                 children: [
                   if (aggregated.isNotEmpty)
                     _buildPieChart(aggregated, totalSeconds),
-                  if (aggregated.isNotEmpty) const SizedBox(height: 24),
+                  if (aggregated.isNotEmpty) const SizedBox(height: 16),
+                  if (aggregated.isNotEmpty)
+                    _buildTotalTimeBanner(totalSeconds),
+                  if (aggregated.isNotEmpty) const SizedBox(height: 16),
                   if (aggregated.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(top: 64),
@@ -494,6 +497,38 @@ class _StatsViewState extends State<StatsView> {
         titlePositionPercentageOffset: isTouched ? 0.55 : 0.5,
       );
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Total time banner
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTotalTimeBanner(int totalSeconds) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(100),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.timer_outlined,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Total: ${_formatSeconds(totalSeconds)}',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
