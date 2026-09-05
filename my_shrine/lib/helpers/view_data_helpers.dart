@@ -47,6 +47,26 @@ class ViewDataHelpers {
   }
 
   // ---------------------------------------------------------------------------
+  // getLocalShrines
+  // ---------------------------------------------------------------------------
+
+  /// Quickly reads shrines from the local SQLite DB. Returns `null` if the DB
+  /// doesn't exist yet (first launch) or contains no active shrines.
+  /// No sync or Firestore work is performed.
+  static Future<List<Shrine>?> getLocalShrines() async {
+    final dbPath = join(await getDatabasesPath(), SqliteConstants.dbName);
+    if (!await databaseExists(dbPath)) return null;
+
+    await SqliteHelpers.localDbInit();
+    final rows = await SqliteHelpers.getUserShrines();
+    final shrines = _sqliteRowsToShrines(rows);
+    if (shrines.isEmpty) return null;
+
+    final ledgerRows = await SqliteHelpers.getLedgerRecords();
+    return _sortShrinesByFrequency(shrines, ledgerRows);
+  }
+
+  // ---------------------------------------------------------------------------
   // trackerViewPreload
   // ---------------------------------------------------------------------------
 
